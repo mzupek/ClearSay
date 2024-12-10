@@ -18,5 +18,13 @@ module.exports = ({ config }: ConfigContext): Partial<ExpoConfig> => {
   return {
     ...config,
     plugins: [...existingPlugins, require("./plugins/withSplashScreen").withSplashScreen],
+    ios: {
+      supportsTablet: true,
+      bundleIdentifier: "com.clearsay",
+      infoPlist: {
+        NSMicrophoneUsageDescription: "ClearSay needs access to your microphone to recognize speech for pronunciation practice.",
+        NSSpeechRecognitionUsageDescription: "ClearSay needs speech recognition to check your pronunciation.",
+      },
+    },
   }
 }

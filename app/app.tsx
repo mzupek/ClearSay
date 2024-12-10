@@ -20,7 +20,7 @@ import "./utils/gestureHandler"
 import { initI18n } from "./i18n"
 import "./utils/ignoreWarnings"
 import { useFonts } from "expo-font"
-import { useEffect, useState } from "react"
+import { useEffect } from "react"
 import { initialWindowMetrics, SafeAreaProvider } from "react-native-safe-area-context"
 import * as Linking from "expo-linking"
 import { useInitialRootStore } from "./models"
@@ -31,6 +31,12 @@ import { customFontsToLoad } from "./theme"
 import Config from "./config"
 import { KeyboardProvider } from "react-native-keyboard-controller"
 import { loadDateFnsLocale } from "./utils/formatDate"
+import { Platform } from 'react-native'
+import * as Speech from 'expo-speech'
+import * as Permissions from 'expo-permissions'
+import { useStores } from "./models"
+import { View } from "react-native"
+import { colors } from "./theme"
 
 export const NAVIGATION_PERSISTENCE_KEY = "NAVIGATION_STATE"
 
@@ -42,6 +48,9 @@ const config = {
       path: "",
     },
     Welcome: "welcome",
+    Practice: "practice",
+    Settings: "settings",
+    Progress: "progress",
     Demo: {
       screens: {
         DemoShowroom: {
@@ -56,7 +65,7 @@ const config = {
 }
 
 interface AppProps {
-  hideSplashScreen: () => Promise<boolean>
+  hideSplashScreen?: () => Promise<void>
 }
 
 /**
@@ -64,67 +73,48 @@ interface AppProps {
  * @param {AppProps} props - The props for the `App` component.
  * @returns {JSX.Element} The rendered `App` component.
  */
-function App(props: AppProps) {
-  const { hideSplashScreen } = props
+export const App: React.FC<AppProps> = function App(props) {
+  console.log("App component rendering")
+  
   const {
-    initialNavigationState,
-    onNavigationStateChange,
-    isRestored: isNavigationStateRestored,
-  } = useNavigationPersistence(storage, NAVIGATION_PERSISTENCE_KEY)
-
-  const [areFontsLoaded, fontLoadError] = useFonts(customFontsToLoad)
-  const [isI18nInitialized, setIsI18nInitialized] = useState(false)
-
-  useEffect(() => {
-    initI18n()
-      .then(() => setIsI18nInitialized(true))
-      .then(() => loadDateFnsLocale())
-  }, [])
-
-  const { rehydrated } = useInitialRootStore(() => {
-    // This runs after the root store has been initialized and rehydrated.
-
-    // If your initialization scripts run very fast, it's good to show the splash screen for just a bit longer to prevent flicker.
-    // Slightly delaying splash screen hiding for better UX; can be customized or removed as needed,
-    // Note: (vanilla Android) The splash-screen will not appear if you launch your app via the terminal or Android Studio. Kill the app and launch it normally by tapping on the launcher icon. https://stackoverflow.com/a/69831106
-    // Note: (vanilla iOS) You might notice the splash-screen logo change size. This happens in debug/development mode. Try building the app for release.
-    setTimeout(hideSplashScreen, 500)
+    rehydrated,
+    rootStore,
+  } = useInitialRootStore(async () => {
+    console.log("RootStore initialization callback")
+    try {
+      await props.hideSplashScreen?.()
+      console.log("Splash screen hidden")
+    } catch (error) {
+      console.error("Error hiding splash screen:", error)
+    }
   })
 
-  // Before we show the app, we have to wait for our state to be ready.
-  // In the meantime, don't render anything. This will be the background
-  // color set in native by rootView's background color.
-  // In iOS: application:didFinishLaunchingWithOptions:
-  // In Android: https://stackoverflow.com/a/45838109/204044
-  // You can replace with your own loading component if you wish.
-  if (
-    !rehydrated ||
-    !isNavigationStateRestored ||
-    !isI18nInitialized ||
-    (!areFontsLoaded && !fontLoadError)
-  ) {
-    return null
+  const { settingsStore } = useStores()
+  console.log("Rehydration status:", rehydrated)
+
+  useEffect(() => {
+    console.log("App useEffect triggered, rehydrated:", rehydrated)
+    if (rehydrated) {
+      console.log("Loading settings...")
+      settingsStore.loadSettings().catch(error => {
+        console.error("Failed to load settings:", error)
+      })
+    }
+  }, [rehydrated])
+
+  if (!rehydrated) {
+    console.log("Showing loading view")
+    return (
+      <View style={{ flex: 1, backgroundColor: colors.background }} />
+    )
   }
 
-  const linking = {
-    prefixes: [prefix],
-    config,
-  }
-
-  // otherwise, we're ready to render the app
+  console.log("Rendering full app")
   return (
-    <SafeAreaProvider initialMetrics={initialWindowMetrics}>
-      <ErrorBoundary catchErrors={Config.catchErrors}>
-        <KeyboardProvider>
-          <AppNavigator
-            linking={linking}
-            initialState={initialNavigationState}
-            onStateChange={onNavigationStateChange}
-          />
-        </KeyboardProvider>
-      </ErrorBoundary>
-    </SafeAreaProvider>
+    <ErrorBoundary catchErrors="always">
+      <KeyboardProvider>
+        <AppNavigator />
+      </KeyboardProvider>
+    </ErrorBoundary>
   )
 }
-
-export default App
