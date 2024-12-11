@@ -193,26 +193,55 @@ export const PracticeScreen = observer(function PracticeScreen() {
       'z': ['z', 'ze', 'zee', 'zed']
     }
 
+    // Number variations
+    const numberVariations: Record<string, string[]> = {
+      '0': ['zero', 'oh', 'null', 'nought'],
+      '1': ['one', 'won', 'want'],
+      '2': ['two', 'too', 'to'],
+      '3': ['three', 'tree'],
+      '4': ['four', 'for', 'fore'],
+      '5': ['five', 'fife'],
+      '6': ['six', 'sicks'],
+      '7': ['seven'],
+      '8': ['eight', 'ate'],
+      '9': ['nine', 'nein']
+    }
+
     // Clean up spoken text
     const cleanSpoken = spoken
       .replace(/letter /i, '')
       .replace(/the /i, '')
       .replace(/capital /i, '')
+      .replace(/number /i, '')
+      .replace(/digit /i, '')
       .trim()
+      .toLowerCase()
 
-    // Get variations for the expected character
-    const validVariations = letterVariations[expected] || [expected]
+    // Determine if we're checking a letter or number
+    const isNumber = /^\d$/.test(expected)
+    const variations = isNumber 
+      ? numberVariations[expected] || [expected]
+      : letterVariations[expected.toLowerCase()] || [expected.toLowerCase()]
 
     // Check if spoken text matches any valid variation
-    const isMatch = validVariations.some(variation => 
-      cleanSpoken === variation || 
-      cleanSpoken === `letter ${variation}` ||
-      cleanSpoken === `the letter ${variation}`
-    )
+    const isMatch = variations.some(variation => {
+      const matches = [
+        cleanSpoken === variation,
+        cleanSpoken === `letter ${variation}`,
+        cleanSpoken === `the letter ${variation}`,
+        cleanSpoken === `number ${variation}`,
+        cleanSpoken === `the number ${variation}`,
+        cleanSpoken === `digit ${variation}`,
+        cleanSpoken === `the digit ${variation}`
+      ]
+      return matches.some(match => match === true)
+    })
 
-    console.log('Checking pronunciation:', {
+    console.log('Pronunciation check:', {
+      spoken,
       cleanSpoken,
-      validVariations,
+      expected,
+      variations,
       isMatch
     })
 
@@ -256,9 +285,9 @@ export const PracticeScreen = observer(function PracticeScreen() {
               disabled={isPlaying || isListening}
               LeftAccessory={() => (
                 <Icon 
-                  icon="play" 
-                  size={24} 
-                  color={isPlaying ? colors.palette.neutral300 : colors.palette.blue500}
+                  icon="bell" 
+                  size={22} 
+                  color={isPlaying ? colors.palette.neutral300 : colors.palette.neutral500}
                 />
               )}
               text={isPlaying ? "Playing..." : "Play"}
@@ -450,12 +479,12 @@ const $errorBox: ViewStyle = {
 
 const $exitButtonContainer: ViewStyle = {
   position: 'absolute',
-  top: spacing.medium,
-  left: spacing.medium,
+  top: spacing.md,
+  left: spacing.md,
   zIndex: 1,
 }
 
 const $exitButton: ViewStyle = {
   minWidth: 100,
-  backgroundColor: colors.palette.neutral400,
+  backgroundColor: colors.palette.accent300,
 } 

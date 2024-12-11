@@ -1,5 +1,4 @@
 import { Instance, SnapshotOut, types } from "mobx-state-tree"
-import { speakCharacter } from "app/utils/speech"
 
 /**
  * Practice store model for stroke recovery exercises
@@ -12,6 +11,7 @@ export const PracticeStoreModel = types
     currentScore: types.optional(types.number, 0),
     totalAttempts: types.optional(types.number, 0),
     lastAttemptCorrect: types.optional(types.maybe(types.boolean), undefined),
+    remainingCharacters: types.optional(types.array(types.string), []),
   })
   .views((self) => ({
     get accuracy() {
@@ -25,27 +25,51 @@ export const PracticeStoreModel = types
       self.currentScore = 0
       self.totalAttempts = 0
       self.lastAttemptCorrect = undefined
-      self.generateNewCharacter()
+      this.initializeCharacterPool()
+    },
+
+    initializeCharacterPool() {
+      // Define our character pool
+      const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("")
+      const numbers = "0123456789".split("")
+      const allCharacters = [...letters, ...numbers]
+      
+      // Fisher-Yates shuffle
+      const shuffled = [...allCharacters]
+      for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1))
+        ;[shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]
+      }
+      
+      self.remainingCharacters.replace(shuffled)
+      console.log("Initialized character pool:", shuffled)
+    },
+
+    generateNewCharacter() {
+      // If we're out of characters, reshuffle
+      if (self.remainingCharacters.length === 0) {
+        this.initializeCharacterPool()
+      }
+      
+      // Take the next character from our shuffled array
+      const nextCharacter = self.remainingCharacters.pop()
+      if (nextCharacter) {
+        self.currentCharacter = nextCharacter
+        self.lastAttemptCorrect = undefined
+        console.log("Generated new character:", nextCharacter, 
+                   "Remaining:", self.remainingCharacters.length)
+      }
     },
 
     clearCharacter() {
-      this.currentCharacter = ""
+      self.currentCharacter = ""
     },
 
     endSession() {
       self.isSessionActive = false
       self.currentCharacter = ""
       self.lastAttemptCorrect = undefined
-    },
-
-    async generateNewCharacter() {
-      const characters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-      const randomIndex = Math.floor(Math.random() * characters.length)
-      self.currentCharacter = characters[randomIndex]
-      self.lastAttemptCorrect = undefined
-      
-      // Automatically play new character
-      await speakCharacter(self.currentCharacter)
+      self.remainingCharacters.clear()
     },
 
     markAttempt(correct: boolean) {
