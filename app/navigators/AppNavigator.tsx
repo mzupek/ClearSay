@@ -10,10 +10,12 @@ import { observer } from "mobx-react-lite"
 import { useStores } from "app/models"
 import { WelcomeScreen } from "app/screens/WelcomeScreen"
 import { MainNavigator } from "./MainNavigator"
+import { ObjectNavigator } from "./ObjectNavigator"
 
 export type AppStackParamList = {
   Welcome: undefined
   MainTabs: undefined
+  ObjectTabs: undefined
 }
 
 const Stack = createNativeStackNavigator<AppStackParamList>()
@@ -26,6 +28,7 @@ const AppStack = observer(function AppStack() {
     >
       <Stack.Screen name="Welcome" component={WelcomeScreen} />
       <Stack.Screen name="MainTabs" component={MainNavigator} />
+      <Stack.Screen name="ObjectTabs" component={ObjectNavigator} />
     </Stack.Navigator>
   )
 })
