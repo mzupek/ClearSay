@@ -71,7 +71,8 @@
     ],
     "experiments": {
       "tsconfigPaths": true
-    }
+    },
+    "platforms": ["ios", "android", "macos"]
   },
   "ignite": {
     "version": "10.0.5"

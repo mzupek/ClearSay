@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react"
-import { View, ViewStyle, TextStyle, Image, ScrollView, Alert } from "react-native"
+import { View, ViewStyle, TextStyle, Image, ScrollView, Alert, Platform, ActionSheetIOS } from "react-native"
 import { Screen, Text, Button } from "app/components"
 import { colors, spacing } from "app/theme"
 import { observer } from "mobx-react-lite"
@@ -11,106 +11,43 @@ export const ObjectSettingsScreen = observer(function ObjectSettingsScreen() {
   const { objectStore } = useStores()
   const [isLoading, setIsLoading] = useState(false)
 
-  const requestPermissions = async () => {
-    try {
-      const cameraPermission = await ImagePicker.requestCameraPermissionsAsync()
-      if (cameraPermission.status !== 'granted') {
-        Alert.alert(
-          'Permission Required',
-          'Camera access is needed to take photos of objects.',
-          [{ text: 'OK' }]
-        )
-        return false
-      }
-      return true
-    } catch (error) {
-      console.error('Error requesting permissions:', error)
-      return false
+  const handleImageSelection = async () => {
+    if (Platform.OS === 'ios' && !Platform.isMacOS) {
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          options: ['Cancel', 'Choose from Library'],
+          cancelButtonIndex: 0,
+        },
+        async (buttonIndex) => {
+         if (buttonIndex === 1) {
+            await pickImage()
+          }
+        }
+      )
+    } else {
+      await pickImage()
     }
   }
 
-  useEffect(() => {
-    const setup = async () => {
-      const hasPermissions = await requestPermissions()
-      if (hasPermissions) {
-        await setupObjectsDirectory()
-        await objectStore.loadObjects()
-      }
-    }
-    setup()
-  }, [])
-
-  const setupObjectsDirectory = async () => {
-    const dirPath = `${FileSystem.documentDirectory}objects`
-    const dirInfo = await FileSystem.getInfoAsync(dirPath)
-    if (!dirInfo.exists) {
-      await FileSystem.makeDirectoryAsync(dirPath, {
-        intermediates: true
-      })
-      console.log('Created objects directory at:', dirPath)
-    }
-  }
-
-  const saveImageToFileSystem = async (uri: string): Promise<string> => {
-    try {
-      const fileName = `object_${Date.now()}.jpg`
-      const dirPath = `${FileSystem.documentDirectory}objects`
-      const newPath = `${dirPath}/${fileName}`
-      
-      // Copy image to permanent location
-      await FileSystem.copyAsync({
-        from: uri,
-        to: newPath
-      })
-
-      console.log('Image saved successfully to:', newPath)
-      // Return the full file:// URI for consistent path handling
-      return `file://${newPath}`
-    } catch (error) {
-      console.error('Error saving image:', error)
-      throw error
-    }
-  }
-
-  const handleTakePhoto = async () => {
+  const takePhoto = async () => {
     try {
       setIsLoading(true)
+      const cameraPermission = await ImagePicker.requestCameraPermissionsAsync()
+      
+      if (cameraPermission.status !== 'granted') {
+        Alert.alert('Permission Required', 'Camera access is needed to take photos.')
+        return
+      }
+
       const result = await ImagePicker.launchCameraAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        quality: 0.8,
+        quality: 0.5,
         allowsEditing: true,
         aspect: [1, 1],
       })
 
       if (!result.canceled && result.assets[0]) {
-        const permanentUri = await saveImageToFileSystem(result.assets[0].uri)
-        console.log('Permanent URI:', permanentUri)
-        
-        Alert.prompt(
-          "Name this object",
-          "Enter the name for this object that you want to practice pronouncing:",
-          [
-            {
-              text: "Cancel",
-              style: "cancel"
-            },
-            {
-              text: "Save",
-              onPress: async (name?: string) => {
-                if (name) {
-                  objectStore.addObject({
-                    id: Date.now().toString(),
-                    uri: permanentUri,
-                    name: name.trim(),
-                    attempts: 0,
-                    correctAttempts: 0
-                  })
-                }
-              }
-            }
-          ],
-          "plain-text"
-        )
+        await processImage(result.assets[0].uri)
       }
     } catch (error) {
       console.error('Error taking photo:', error)
@@ -120,7 +57,63 @@ export const ObjectSettingsScreen = observer(function ObjectSettingsScreen() {
     }
   }
 
-  const handleDeletePhoto = async (id: string) => {
+  const pickImage = async () => {
+    try {
+      setIsLoading(true)
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        quality: 0.5,
+        allowsEditing: true,
+        aspect: [1, 1],
+      })
+
+      if (!result.canceled && result.assets[0]) {
+        await processImage(result.assets[0].uri)
+      }
+    } catch (error) {
+      console.error('Error picking image:', error)
+      Alert.alert('Error', 'Failed to select image. Please try again.')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const processImage = async (uri: string) => {
+    try {
+      const base64 = await FileSystem.readAsStringAsync(uri, {
+        encoding: FileSystem.EncodingType.Base64,
+      })
+      const base64Uri = `data:image/jpeg;base64,${base64}`
+      
+      Alert.prompt(
+        "Name this object",
+        "Enter the name for this object that you want to practice pronouncing:",
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Save",
+            onPress: async (name?: string) => {
+              if (name) {
+                objectStore.addObject({
+                  id: Date.now().toString(),
+                  uri: base64Uri,
+                  name: name.trim(),
+                  attempts: 0,
+                  correctAttempts: 0
+                })
+              }
+            }
+          }
+        ],
+        "plain-text"
+      )
+    } catch (error) {
+      console.error('Error processing image:', error)
+      Alert.alert('Error', 'Failed to process image. Please try again.')
+    }
+  }
+
+  const handleDeletePhoto = (id: string) => {
     Alert.alert(
       "Delete Object",
       "Are you sure you want to delete this object?",
@@ -129,52 +122,34 @@ export const ObjectSettingsScreen = observer(function ObjectSettingsScreen() {
         { 
           text: "Delete", 
           style: "destructive",
-          onPress: async () => {
-            const object = objectStore.objects.find(obj => obj.id === id)
-            if (object) {
-              try {
-                // Remove file:// prefix for FileSystem operations
-                const filePath = object.uri.replace('file://', '')
-                const fileInfo = await FileSystem.getInfoAsync(filePath)
-                
-                if (fileInfo.exists) {
-                  await FileSystem.deleteAsync(filePath, { idempotent: true })
-                  console.log('Successfully deleted file at:', filePath)
-                } else {
-                  console.log('File does not exist:', filePath)
-                }
-                
-                objectStore.removeObject(id)
-              } catch (error) {
-                console.error('Error deleting image:', error)
-                Alert.alert('Error', 'Failed to delete object. Please try again.')
-              }
-            }
-          }
+          onPress: () => objectStore.removeObject(id)
         }
       ]
     )
   }
 
   return (
-    <Screen preset="scroll" style={$screenContainer}>
-      <Text text="Object List" preset="subheading" style={$title} />
-      
-      <Button
-        text="Take Photo of New Object"
-        onPress={handleTakePhoto}
-        style={$addButton}
-        disabled={isLoading}
-      />
+    <Screen preset="scroll" safeAreaEdges={["top"]}>
+      <View style={$screenContainer}>
+        <Text 
+          text="Object Settings" 
+          preset="heading" 
+          style={$title}
+        />
+        
+        <Button
+          text={Platform.isMacOS ? "Select Image" : "Add Photo"}
+          onPress={handleImageSelection}
+          style={$addButton}
+          disabled={isLoading}
+        />
 
-      <ScrollView style={$photoList}>
-        {objectStore.objects.map(photo => {
-          console.log('Rendering photo:', photo.uri)
-          return (
+        <ScrollView>
+          {objectStore.objects.map(photo => (
             <View key={photo.id} style={$photoItem}>
               <Image 
                 source={{ uri: photo.uri }}
-                style={$photoImage} 
+                style={$photoImage}
                 resizeMode="cover"
                 onError={(error) => console.error('Image loading error:', error.nativeEvent.error)}
               />
@@ -188,9 +163,9 @@ export const ObjectSettingsScreen = observer(function ObjectSettingsScreen() {
                 />
               </View>
             </View>
-          )
-        })}
-      </ScrollView>
+          ))}
+        </ScrollView>
+      </View>
     </Screen>
   )
 })

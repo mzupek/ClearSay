@@ -1,5 +1,5 @@
 import React from "react"
-import { View, ViewStyle } from "react-native"
+import { TextStyle, View, ViewStyle } from "react-native"
 import { Screen, Text, Button } from "app/components"
 import { colors, spacing } from "app/theme"
 import { useNavigation } from "@react-navigation/native"
@@ -17,6 +17,7 @@ export function WelcomeScreen() {
           preset="filled"
           onPress={() => navigation.navigate("MainTabs")}
           style={$button}
+          textStyle={$whiteText}
         />
         
         <Button
@@ -24,6 +25,7 @@ export function WelcomeScreen() {
           preset="filled"
           onPress={() => navigation.navigate("ObjectTabs")}
           style={$button}
+          textStyle={$whiteText}
         />
       </View>
     </Screen>
@@ -42,8 +44,22 @@ const $title: TextStyle = {
 
 const $buttonContainer: ViewStyle = {
   gap: spacing.md,
+  alignContent: "center",
+  justifyContent: "center",
+  alignItems: "center",
 }
 
 const $button: ViewStyle = {
+  maxWidth: 300,
+  height: 200,
   marginVertical: spacing.md,
+  backgroundColor: colors.palette.accent500,
+}
+
+const $whiteText: TextStyle = {
+  height: 150,
+  paddingTop: 40,
+  lineHeight: 40,
+  color: 'white',
+  fontSize: 30,
 }

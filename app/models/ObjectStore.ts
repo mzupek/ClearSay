@@ -23,114 +23,55 @@ export const ObjectStoreModel = types
   .model("ObjectStore")
   .props({
     objects: types.array(PhotoItemModel),
-    currentObjectId: types.maybe(types.string),
+    currentObjectIndex: types.optional(types.number, -1),
     isSessionActive: types.optional(types.boolean, false),
-    currentScore: types.optional(types.number, 0),
-    totalAttempts: types.optional(types.number, 0),
-    lastAttemptCorrect: types.optional(types.maybe(types.boolean), undefined),
   })
-  .views((self) => ({
+  .views(self => ({
     get currentObject() {
-      return self.currentObjectId 
-        ? self.objects.find(obj => obj.id === self.currentObjectId)
-        : undefined
+      return self.currentObjectIndex >= 0 ? self.objects[self.currentObjectIndex] : undefined
+    },
+    get currentScore() {
+      return self.objects.reduce((sum, obj) => sum + obj.correctAttempts, 0)
     },
     get accuracy() {
-      if (self.totalAttempts === 0) return 0
-      return Math.round((self.currentScore / self.totalAttempts) * 100)
-    },
-    get remainingObjects() {
-      return self.objects.filter(obj => obj.id !== self.currentObjectId)
+      const totalAttempts = self.objects.reduce((sum, obj) => sum + obj.attempts, 0)
+      if (totalAttempts === 0) return 0
+      return Math.round((self.currentScore / totalAttempts) * 100)
     }
   }))
-  .actions((self) => ({
-    setObjects(objects: PhotoItem[]) {
-      self.objects.replace(objects)
+  .actions(self => ({
+    resetScores() {
+      self.objects.forEach(obj => {
+        obj.attempts = 0
+        obj.correctAttempts = 0
+      })
     },
-
-    addObject(object: PhotoItem) {
-      self.objects.push(object)
-      this.saveObjects()
-    },
-
-    removeObject(id: string) {
-      self.objects.replace(self.objects.filter(obj => obj.id !== id))
-      this.saveObjects()
-    },
-
-    reset() {
-      self.objects.clear()
-      self.currentObjectId = undefined
-      self.isSessionActive = false
-      self.currentScore = 0
-      self.totalAttempts = 0
-      self.lastAttemptCorrect = undefined
-    },
-
     startSession() {
-      if (self.objects.length === 0) return false
       self.isSessionActive = true
-      self.currentScore = 0
-      self.totalAttempts = 0
-      self.lastAttemptCorrect = undefined
-      this.generateNewObject()
-      return true
+      self.currentObjectIndex = Math.floor(Math.random() * self.objects.length)
     },
-
     endSession() {
       self.isSessionActive = false
-      self.currentObjectId = undefined
-      self.lastAttemptCorrect = undefined
+      self.currentObjectIndex = -1
+      self.resetScores()
     },
-
-    generateNewObject() {
-      const remainingObjects = self.remainingObjects
-      if (remainingObjects.length === 0) {
-        // If no more objects, reshuffle by clearing current
-        self.currentObjectId = undefined
-        return this.generateNewObject()
-      }
-      
-      const randomIndex = Math.floor(Math.random() * remainingObjects.length)
-      self.currentObjectId = remainingObjects[randomIndex].id
-      self.lastAttemptCorrect = undefined
+    nextObject() {
+      if (self.objects.length <= 1) return
+      let nextIndex
+      do {
+        nextIndex = Math.floor(Math.random() * self.objects.length)
+      } while (nextIndex === self.currentObjectIndex)
+      self.currentObjectIndex = nextIndex
     },
-
-    markAttempt(objectId: string, correct: boolean) {
-      const object = self.objects.find(obj => obj.id === objectId)
+    markAttempt(id: string, correct: boolean) {
+      const object = self.objects.find(obj => obj.id === id)
       if (object) {
         object.attempts += 1
-        if (correct) object.correctAttempts += 1
-      }
-      
-      self.totalAttempts += 1
-      if (correct) self.currentScore += 1
-      self.lastAttemptCorrect = correct
-      
-      this.saveObjects()
-    },
-
-    async loadObjects() {
-      try {
-        const stored = await AsyncStorage.getItem(STORAGE_KEY)
-        if (stored) {
-          const objects = JSON.parse(stored)
-          this.setObjects(objects)
-          console.log('Objects loaded:', objects.length)
+        if (correct) {
+          object.correctAttempts += 1
         }
-      } catch (error) {
-        console.error('Error loading objects:', error)
       }
-    },
-
-    async saveObjects() {
-      try {
-        await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(self.objects.toJSON()))
-        console.log('Objects saved:', self.objects.length)
-      } catch (error) {
-        console.error('Error saving objects:', error)
-      }
-    },
+    }
   }))
 
 export interface ObjectStore extends Instance<typeof ObjectStoreModel> {}
