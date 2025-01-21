@@ -4,6 +4,8 @@ import { shuffle } from "app/utils/shuffle"
 export const PracticeStoreModel = types
   .model("PracticeStore")
   .props({
+    isSessionActive: types.optional(types.boolean, false),
+    currentRound: types.optional(types.number, 1),
     currentCharacter: types.optional(types.string, ""),
     currentRound: types.optional(types.number, 1),
     charactersFound: types.optional(types.number, 0),

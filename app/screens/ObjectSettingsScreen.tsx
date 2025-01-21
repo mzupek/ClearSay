@@ -6,9 +6,11 @@ import { observer } from "mobx-react-lite"
 import * as ImagePicker from 'expo-image-picker'
 import { useStores } from "app/models"
 import * as FileSystem from 'expo-file-system'
+import { useNavigation } from "@react-navigation/native"
 
 export const ObjectSettingsScreen = observer(function ObjectSettingsScreen() {
-  const { objectStore } = useStores()
+  const { objectStore, objectSetStore } = useStores()
+  const navigation = useNavigation()
   const [isLoading, setIsLoading] = useState(false)
 
   const handleImageSelection = async () => {
@@ -172,7 +174,6 @@ export const ObjectSettingsScreen = observer(function ObjectSettingsScreen() {
 
 const $screenContainer: ViewStyle = {
   flex: 1,
-  backgroundColor: colors.background,
   padding: spacing.md,
 }
 
@@ -203,22 +204,41 @@ const $photoImage: any = {
   height: 60,
   borderRadius: 4,
   marginRight: spacing.md,
-  backgroundColor: colors.palette.neutral300,
 }
 
 const $photoDetails: ViewStyle = {
   flex: 1,
-  flexDirection: 'row',
-  justifyContent: 'space-between',
-  alignItems: 'center',
+  alignItems: 'flex-start',
 }
 
 const $photoName: TextStyle = {
-  flex: 1,
-  marginRight: spacing.sm,
+  marginBottom: spacing.xs,
+}
+
+const $actionButtons: ViewStyle = {
+  flexDirection: 'row',
+  gap: spacing.xs,
+  alignSelf: 'flex-end',
+}
+
+const $actionButton: ViewStyle = {
+  minWidth: 100,
+}
+
+const $addToSetButton: ViewStyle = {
+  backgroundColor: colors.palette.secondary500,
+  
 }
 
 const $deleteButton: ViewStyle = {
-  minWidth: 80,
   backgroundColor: colors.palette.angry500,
-} 
+}
+
+const $manageButton: ViewStyle = {
+  marginBottom: spacing.md,
+  backgroundColor: colors.palette.secondary500,
+}
+const $whiteText: TextStyle = {
+  color: 'white',
+  fontSize: 20,
+}

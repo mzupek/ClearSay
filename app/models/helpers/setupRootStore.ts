@@ -49,3 +49,21 @@ export async function setupRootStore(rootStore: RootStore) {
 
   return { rootStore, restoredState, unsubscribe }
 }
+
+export const useInitialRootStore = () => {
+  const rootStore = setupRootStore(RootStore.create({
+    objectStore: { objects: [] },
+    objectSetStore: { sets: [] },
+    practiceStore: {
+      isSessionActive: false,
+      currentRound: 1,
+      currentCharacter: "",
+      characterPool: [],
+      charactersFound: 0,
+      totalTargetCharacters: 0,
+      selectedCharacters: [],
+      sessionHistory: []
+    }
+  }))
+  return { rootStore, rehydrated: true }
+}

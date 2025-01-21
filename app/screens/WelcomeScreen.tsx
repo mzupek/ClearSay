@@ -43,6 +43,14 @@ const $title: TextStyle = {
 }
 
 const $buttonContainer: ViewStyle = {
+  gap: spacing.xl,
+  alignContent: "center",
+  justifyContent: "center",
+  alignItems: "center",
+}
+
+const $buttonGroup: ViewStyle = {
+  alignItems: "center",
   gap: spacing.md,
   alignContent: "center",
   justifyContent: "center",

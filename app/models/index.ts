@@ -1,4 +1,12 @@
-export * from "./RootStore"
-export * from "./helpers/getRootStore"
-export * from "./helpers/useStores"
-export * from "./helpers/setupRootStore"
+import { RootStore } from "./RootStore"
+import { useStores, RootStoreProvider, useInitialRootStore, getRootStore } from "./helpers/useStores"
+
+// Export everything individually to avoid property configuration issues
+export { RootStore }
+export { useStores }
+export { RootStoreProvider }
+export { useInitialRootStore }
+export { getRootStore }
+
+// Export type separately
+export type { RootStore as RootStoreType } from "./RootStore"
