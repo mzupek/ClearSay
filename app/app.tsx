@@ -42,8 +42,26 @@ import { useColorScheme } from "react-native"
 import { GestureHandlerRootView } from "react-native-gesture-handler"
 import { ViewStyle } from "react-native"
 import * as SplashScreen from "expo-splash-screen"
+import { RootStore, RootStoreProvider } from "./models"
 
 export const NAVIGATION_PERSISTENCE_KEY = "NAVIGATION_STATE"
+
+// Keep the splash screen visible while we fetch resources
+SplashScreen.preventAutoHideAsync()
+
+const rootStore = RootStore.create({
+  objectStore: { objects: [] },
+  objectSetStore: { sets: [] },
+  practiceStore: {
+    isSessionActive: false,
+    currentRound: 1,
+    currentCharacter: "",
+    characterPool: [],
+    charactersFound: 0,
+    totalTargetCharacters: 0,
+    sessionHistory: []
+  }
+})
 
 // Web linking configuration
 const prefix = Linking.createURL("/")
@@ -78,49 +96,43 @@ interface AppProps {
  * @param {AppProps} props - The props for the `App` component.
  * @returns {JSX.Element} The rendered `App` component.
  */
-export const App: React.FC<AppProps> = function App(props) {
-  console.log("App component rendering")
-  
-  const colorScheme = useColorScheme()
+export function App() {
   const {
     initialNavigationState,
     onNavigationStateChange,
     isRestored: isNavigationStateRestored,
   } = useNavigationPersistence(storage, NAVIGATION_PERSISTENCE_KEY)
 
-  const { rehydrated } = useInitialRootStore(() => {
-    // This runs after the root store has been initialized and rehydrated.
-    SplashScreen.hideAsync()
-  })
-
-  const { settingsStore } = useStores()
-  console.log("Rehydration status:", rehydrated)
-
   useEffect(() => {
-    console.log("App useEffect triggered, rehydrated:", rehydrated)
-    if (rehydrated) {
-      console.log("Loading settings...")
-      settingsStore.loadSettings().catch(error => {
-        console.error("Failed to load settings:", error)
-      })
+    async function prepare() {
+      try {
+        await rootStore.objectStore.loadObjects()
+      } catch (e) {
+        console.warn(e)
+      } finally {
+        await SplashScreen.hideAsync()
+      }
     }
-  }, [rehydrated])
 
-  if (!rehydrated || !isNavigationStateRestored) return null
+    if (isNavigationStateRestored) {
+      prepare()
+    }
+  }, [isNavigationStateRestored])
 
-  console.log("Rendering full app")
+  if (!isNavigationStateRestored) return null
+
   return (
-    <SafeAreaProvider initialMetrics={initialWindowMetrics}>
-      <GestureHandlerRootView style={$container}>
-        <ErrorBoundary catchErrors="always">
-          <KeyboardProvider>
+    <SafeAreaProvider>
+      <KeyboardProvider>
+        <RootStoreProvider value={rootStore}>
+          <ErrorBoundary catchErrors={Config.catchErrors}>
             <AppNavigator
               initialState={initialNavigationState}
               onStateChange={onNavigationStateChange}
             />
-          </KeyboardProvider>
-        </ErrorBoundary>
-      </GestureHandlerRootView>
+          </ErrorBoundary>
+        </RootStoreProvider>
+      </KeyboardProvider>
     </SafeAreaProvider>
   )
 }

@@ -1,29 +1,38 @@
-import { Instance, SnapshotOut, types } from "mobx-state-tree"
-import { AuthenticationStoreModel } from "./AuthenticationStore"
-import { EpisodeStoreModel } from "./EpisodeStore"
-import { PracticeStoreModel } from "./PracticeStore"
-import { SettingsStoreModel } from "./SettingsStore"
-import { ObjectStoreModel } from "./ObjectStore"
+import { Instance, types } from "mobx-state-tree"
+import { ObjectStore } from "./ObjectStore"
+import { ObjectSetStore } from "./ObjectSetStore"
+import { PracticeStore } from "./PracticeStore"
+
+const SettingsStore = types
+  .model("SettingsStore")
+  .props({
+    loaded: types.optional(types.boolean, false)
+  })
+  .actions(self => ({
+    loadSettings() {
+      self.loaded = true
+      return Promise.resolve()
+    }
+  }))
 
 /**
  * A RootStore model.
  */
-export const RootStoreModel = types
+export const RootStore = types
   .model("RootStore")
   .props({
-    authenticationStore: types.optional(AuthenticationStoreModel, {}),
-    episodeStore: types.optional(EpisodeStoreModel, {}),
-    practiceStore: types.optional(PracticeStoreModel, {}),
-    settingsStore: types.optional(SettingsStoreModel, {}),
-    objectStore: types.optional(ObjectStoreModel, {}),
+    objectStore: types.optional(ObjectStore, { objects: [] }),
+    objectSetStore: types.optional(ObjectSetStore, { sets: [] }),
+    practiceStore: types.optional(PracticeStore, {
+      isSessionActive: false,
+      currentRound: 1,
+      currentCharacter: "",
+      characterPool: [],
+      charactersFound: 0,
+      totalTargetCharacters: 0,
+      sessionHistory: []
+    }),
+    settingsStore: types.optional(SettingsStore, { loaded: false })
   })
-  .actions((self) => ({
-    reset() {
-      self.authenticationStore.reset()
-      self.episodeStore.reset()
-      self.practiceStore.reset()
-    },
-  }))
 
-export interface RootStore extends Instance<typeof RootStoreModel> {}
-export interface RootStoreSnapshot extends SnapshotOut<typeof RootStoreModel> {}
+export interface RootStore extends Instance<typeof RootStore> {}

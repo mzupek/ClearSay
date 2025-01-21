@@ -78,3 +78,6 @@ export { spacingLight as spacing }
 export * from "./styles"
 export * from "./typography"
 export * from "./timing"
+
+// Re-export spacing utilities
+export { spacing, isTablet, getResponsiveSize, getResponsiveSpacing } from "./spacing"

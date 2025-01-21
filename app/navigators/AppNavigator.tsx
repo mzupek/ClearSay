@@ -11,11 +11,13 @@ import { useStores } from "app/models"
 import { WelcomeScreen } from "app/screens/WelcomeScreen"
 import { MainNavigator } from "./MainNavigator"
 import { ObjectNavigator } from "./ObjectNavigator"
+import { ObjectSetScreen } from "app/screens/ObjectSetScreen"
 
 export type AppStackParamList = {
   Welcome: undefined
   MainTabs: undefined
   ObjectTabs: undefined
+  ObjectSet: undefined
 }
 
 const Stack = createNativeStackNavigator<AppStackParamList>()
@@ -29,6 +31,7 @@ const AppStack = observer(function AppStack() {
       <Stack.Screen name="Welcome" component={WelcomeScreen} />
       <Stack.Screen name="MainTabs" component={MainNavigator} />
       <Stack.Screen name="ObjectTabs" component={ObjectNavigator} />
+      <Stack.Screen name="ObjectSet" component={ObjectSetScreen} />
     </Stack.Navigator>
   )
 })

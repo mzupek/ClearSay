@@ -1,83 +1,193 @@
-import { Instance, SnapshotOut, types } from "mobx-state-tree"
+import { types } from "mobx-state-tree"
+import { shuffle } from "app/utils/shuffle"
+import { format, subDays, isWithinInterval, startOfDay, endOfDay } from "date-fns"
 
-/**
- * Practice store model for stroke recovery exercises
- */
-export const PracticeStoreModel = types
+const SessionRecord = types.model("SessionRecord", {
+  id: types.identifier,
+  character: types.string,
+  accuracy: types.number,
+  totalFound: types.number,
+  totalTargets: types.number,
+  timestamp: types.number,
+  date: types.string,
+})
+
+export const PracticeStore = types
   .model("PracticeStore")
   .props({
     currentCharacter: types.optional(types.string, ""),
+    currentRound: types.optional(types.number, 1),
+    charactersFound: types.optional(types.number, 0),
+    totalTargetCharacters: types.optional(types.number, 0),
     isSessionActive: types.optional(types.boolean, false),
-    currentScore: types.optional(types.number, 0),
-    totalAttempts: types.optional(types.number, 0),
-    lastAttemptCorrect: types.optional(types.maybe(types.boolean), undefined),
-    remainingCharacters: types.optional(types.array(types.string), []),
+    characterPool: types.optional(types.array(types.string), []),
+    sessionHistory: types.array(SessionRecord),
+    lastPositions: types.optional(types.array(types.number), []),
   })
-  .views((self) => ({
-    get accuracy() {
-      if (self.totalAttempts === 0) return 0
-      return Math.round((self.currentScore / self.totalAttempts) * 100)
+  .views(self => ({
+    accuracy() {
+      if (self.totalTargetCharacters === 0) return 0
+      return Math.round((self.charactersFound / self.totalTargetCharacters) * 100)
+    },
+    isGameComplete() {
+      return self.currentRound > 10
+    },
+    getCurrentRoundCharacters() {
+      const startIndex = (self.currentRound - 1) * 5
+      return self.characterPool.slice(startIndex, startIndex + 5)
+    },
+    get averageAccuracy() {
+      if (self.sessionHistory.length === 0) return 0
+      const total = self.sessionHistory.reduce((sum, session) => sum + session.accuracy, 0)
+      return Math.round(total / self.sessionHistory.length)
+    },
+    getCharacterStats(char: string) {
+      const sessions = self.sessionHistory.filter(s => s.character === char)
+      if (sessions.length === 0) return null
+      const totalAccuracy = sessions.reduce((sum, s) => sum + s.accuracy, 0)
+      return {
+        attempts: sessions.length,
+        averageAccuracy: Math.round(totalAccuracy / sessions.length),
+        lastAttempt: Math.max(...sessions.map(s => s.timestamp))
+      }
+    },
+    getDateRangeStats(days: number) {
+      const endDate = new Date()
+      const startDate = subDays(endDate, days)
+      
+      const sessionsInRange = self.sessionHistory.filter(session => {
+        const sessionDate = new Date(session.timestamp)
+        return isWithinInterval(sessionDate, {
+          start: startOfDay(startDate),
+          end: endOfDay(endDate)
+        })
+      })
+
+      if (sessionsInRange.length === 0) return null
+
+      const accuracySum = sessionsInRange.reduce((sum, s) => sum + s.accuracy, 0)
+      return {
+        sessions: sessionsInRange.length,
+        averageAccuracy: Math.round(accuracySum / sessionsInRange.length),
+        characters: new Set(sessionsInRange.map(s => s.character)).size
+      }
+    },
+    getDailyStats(days: number) {
+      const stats: { date: string; accuracy: number; sessions: number }[] = []
+      const endDate = new Date()
+      
+      for (let i = 0; i < days; i++) {
+        const date = subDays(endDate, i)
+        const dayStart = startOfDay(date)
+        const dayEnd = endOfDay(date)
+        
+        const daySessions = self.sessionHistory.filter(session => {
+          const sessionDate = new Date(session.timestamp)
+          return isWithinInterval(sessionDate, { start: dayStart, end: dayEnd })
+        })
+
+        if (daySessions.length > 0) {
+          const accuracySum = daySessions.reduce((sum, s) => sum + s.accuracy, 0)
+          stats.push({
+            date: format(date, 'MMM d'),
+            accuracy: Math.round(accuracySum / daySessions.length),
+            sessions: daySessions.length
+          })
+        }
+      }
+      
+      return stats.reverse()
     }
   }))
-  .actions((self) => ({
-    startSession() {
+  .actions(self => ({
+    generateCharacterSet(targetChar: string) {
+      const allChars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789".split("")
+      const otherChars = allChars.filter(char => char !== targetChar)
+      
+      // Create 10 rounds of 5 characters each
+      const rounds: string[][] = []
+      
+      for (let i = 0; i < 10; i++) {
+        let roundChars: string[] = []
+        
+        // Get last position of target character
+        const lastPos = self.lastPositions[i] || -1
+        
+        // Generate 5 positions, avoiding the last position
+        let availablePositions = [0, 1, 2, 3, 4]
+        if (lastPos !== -1) {
+          availablePositions = availablePositions.filter(pos => pos !== lastPos)
+        }
+        
+        // Randomly select position for target character
+        const targetPos = availablePositions[Math.floor(Math.random() * availablePositions.length)]
+        
+        // Fill other positions with random characters
+        for (let j = 0; j < 5; j++) {
+          if (j === targetPos) {
+            roundChars[j] = targetChar
+          } else {
+            const randomChar = shuffle(otherChars)[0]
+            roundChars[j] = randomChar
+          }
+        }
+        
+        // Store the position for next game
+        self.lastPositions[i] = targetPos
+        rounds.push(roundChars)
+      }
+      
+      // Flatten and return all rounds
+      return rounds.flat()
+    },
+
+    startNewGame() {
       self.isSessionActive = true
-      self.currentScore = 0
-      self.totalAttempts = 0
-      self.lastAttemptCorrect = undefined
-      this.initializeCharacterPool()
+      self.currentRound = 1
+      self.charactersFound = 0
+      self.totalTargetCharacters = 0
+      
+      // Use Fisher-Yates to select new character
+      const allChars = shuffle("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789".split(""))
+      self.currentCharacter = allChars[0]
+      
+      self.characterPool = self.generateCharacterSet(self.currentCharacter)
     },
 
-    initializeCharacterPool() {
-      // Define our character pool
-      const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("")
-      const numbers = "0123456789".split("")
-      const allCharacters = [...letters, ...numbers]
-      
-      // Fisher-Yates shuffle
-      const shuffled = [...allCharacters]
-      for (let i = shuffled.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1))
-        ;[shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]
-      }
-      
-      self.remainingCharacters.replace(shuffled)
-      console.log("Initialized character pool:", shuffled)
+    markCharacterFound(found: number) {
+      self.charactersFound += found
+      self.totalTargetCharacters += self.getCurrentRoundCharacters()
+        .filter(char => char === self.currentCharacter).length
     },
 
-    generateNewCharacter() {
-      // If we're out of characters, reshuffle
-      if (self.remainingCharacters.length === 0) {
-        this.initializeCharacterPool()
+    nextRound() {
+      if (self.currentRound < 10) {
+        self.currentRound += 1
+      } else {
+        this.startNewGame()
       }
-      
-      // Take the next character from our shuffled array
-      const nextCharacter = self.remainingCharacters.pop()
-      if (nextCharacter) {
-        self.currentCharacter = nextCharacter
-        self.lastAttemptCorrect = undefined
-        console.log("Generated new character:", nextCharacter, 
-                   "Remaining:", self.remainingCharacters.length)
-      }
-    },
-
-    clearCharacter() {
-      self.currentCharacter = ""
     },
 
     endSession() {
       self.isSessionActive = false
-      self.currentCharacter = ""
-      self.lastAttemptCorrect = undefined
-      self.remainingCharacters.clear()
+      self.currentRound = 1
+      self.charactersFound = 0
+      self.totalTargetCharacters = 0
+      self.characterPool.clear()
     },
 
-    markAttempt(correct: boolean) {
-      self.totalAttempts += 1
-      if (correct) self.currentScore += 1
-      self.lastAttemptCorrect = correct
-    },
+    recordSession() {
+      self.sessionHistory.push({
+        id: Date.now().toString(),
+        character: self.currentCharacter,
+        accuracy: self.accuracy(),
+        totalFound: self.charactersFound,
+        totalTargets: self.totalTargetCharacters,
+        timestamp: Date.now(),
+        date: format(new Date(), 'yyyy-MM-dd')
+      })
+    }
   }))
 
-export interface PracticeStore extends Instance<typeof PracticeStoreModel> {}
-export interface PracticeStoreSnapshot extends SnapshotOut<typeof PracticeStoreModel> {} 
+type PracticeStoreType = Instance<typeof PracticeStore>
+export interface PracticeStore extends PracticeStoreType {}
