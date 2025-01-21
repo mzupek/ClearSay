@@ -2,18 +2,7 @@ import { Instance, types } from "mobx-state-tree"
 import { ObjectStore } from "./ObjectStore"
 import { ObjectSetStore } from "./ObjectSetStore"
 import { PracticeStore } from "./PracticeStore"
-
-const SettingsStore = types
-  .model("SettingsStore")
-  .props({
-    loaded: types.optional(types.boolean, false)
-  })
-  .actions(self => ({
-    loadSettings() {
-      self.loaded = true
-      return Promise.resolve()
-    }
-  }))
+import { SettingsStore } from "./SettingsStore"
 
 /**
  * A RootStore model.
@@ -32,7 +21,14 @@ export const RootStore = types
       totalTargetCharacters: 0,
       sessionHistory: []
     }),
-    settingsStore: types.optional(SettingsStore, { loaded: false })
+    settingsStore: types.optional(SettingsStore, {})
   })
+  .actions(self => ({
+    afterCreate() {
+      self.objectStore.loadObjects()
+      self.objectSetStore.loadSets()
+      self.settingsStore.loadSettings()
+    }
+  }))
 
 export interface RootStore extends Instance<typeof RootStore> {}

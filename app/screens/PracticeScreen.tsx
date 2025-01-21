@@ -98,9 +98,15 @@ export const PracticeScreen = observer(function PracticeScreen() {
       <Screen preset="scroll" safeAreaEdges={["top"]} style={$container}>
         <Text text="Find the Character Activity" style={$title} />
         <Button
-          text="Start Activity"
+          text="Start Practice ➡️"
           onPress={() => practiceStore.startNewGame()}
           style={$startButton}
+          textStyle={$whiteText}
+        />
+         <Button
+          text="⬅️ Exit Practice"
+          onPress={() => navigation.goBack()}
+          style={$exitButton}
           textStyle={$whiteText}
         />
       </Screen>
@@ -113,7 +119,7 @@ export const PracticeScreen = observer(function PracticeScreen() {
         <Text text={`Round: ${practiceStore.currentRound}/10`} style={$score} />
         <Text text={`Accuracy: ${practiceStore.accuracy()}%`} style={$score} />
         <Button
-          text="End Session"
+          text="⬅️ Exit"
           onPress={handleEndSession}
           style={[$button, $endButton]}
           textStyle={$whiteText}
@@ -135,7 +141,7 @@ export const PracticeScreen = observer(function PracticeScreen() {
         />
       </View>
 
-      <View style={$targetContainer}>
+      <View style={$flashCard}>
         <Text text="Find all:" style={$instruction} />
         <Text text={practiceStore.currentCharacter} style={$targetChar} />
       </View>
@@ -169,7 +175,7 @@ export const PracticeScreen = observer(function PracticeScreen() {
       </View>
 
       <Button
-        text="Next Round"
+        text="Next Round ➡️"
         onPress={handleNextRound}
         style={[$startButton]}
         textStyle={$whiteText}
@@ -278,6 +284,19 @@ const $startButton: ViewStyle = {
   elevation: 5,
 }
 
+const $exitButton: ViewStyle = {
+  backgroundColor: 'red',
+  borderRadius: 10,
+  padding: 10,
+  minHeight: 80,
+  shadowColor: 'black',
+  shadowOffset: { width: 5, height: 5 },
+  shadowOpacity: 1,
+  shadowRadius: 5,
+  elevation: 5,
+  marginTop: spacing.large,
+}
+
 const $correctButton: ViewStyle = {
   backgroundColor: 'green',
 }
@@ -325,4 +344,20 @@ const $whiteText: TextStyle = {
   fontSize: 25,
   lineHeight: 30,
   fontWeight: "bold",
+}
+
+const $flashCard: ViewStyle = {
+  backgroundColor: 'white',
+  borderRadius: 16,
+  padding: spacing.medium,
+  shadowColor: 'black',
+  shadowOffset: { width: 0, height: 2 },
+  shadowOpacity: 0.25,
+  shadowRadius: 4,
+  elevation: 5,
+  alignItems: 'center',
+  gap: spacing.medium,
+  width: 300,
+  alignSelf: 'center',
+  marginBottom: spacing.large,
 }

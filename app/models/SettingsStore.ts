@@ -1,56 +1,58 @@
-import { Instance, SnapshotOut, types } from "mobx-state-tree"
-import AsyncStorage from "@react-native-async-storage/async-storage"
+import { Instance, types } from "mobx-state-tree"
+import * as storage from "app/utils/storage"
 
-const STORAGE_KEY = "CLEARSAY_SETTINGS"
+const VoiceModel = types.model("Voice", {
+  id: types.string,
+  name: types.string,
+  quality: types.string,
+  isSelected: types.optional(types.boolean, false)
+})
 
-export const SettingsStoreModel = types
+export const SettingsStore = types
   .model("SettingsStore")
   .props({
     selectedVoiceId: types.optional(types.string, ""),
-    selectedVoiceName: types.optional(types.string, "Default"),
-    availableVoices: types.optional(types.array(types.frozen()), [])
+    selectedVoiceName: types.optional(types.string, ""),
+    availableVoices: types.optional(types.array(VoiceModel), [])
   })
-  .actions((self) => ({
+  .actions(self => ({
     setSelectedVoice(voiceId: string, voiceName: string) {
       self.selectedVoiceId = voiceId
       self.selectedVoiceName = voiceName
-      // Save settings when voice is selected
       this.saveSettings()
     },
 
     setAvailableVoices(voices: any[]) {
-      self.availableVoices = voices
+      self.availableVoices.replace(voices)
+      this.saveSettings()
     },
 
-    // Load settings from storage
     async loadSettings() {
       try {
-        const settings = await AsyncStorage.getItem(STORAGE_KEY)
+        const settings = await storage.load("settings")
         if (settings) {
-          const parsed = JSON.parse(settings)
-          self.selectedVoiceId = parsed.selectedVoiceId
-          self.selectedVoiceName = parsed.selectedVoiceName
-          console.log('Settings loaded:', parsed)
+          self.selectedVoiceId = settings.selectedVoiceId
+          self.selectedVoiceName = settings.selectedVoiceName
+          if (settings.availableVoices) {
+            self.availableVoices.replace(settings.availableVoices)
+          }
         }
       } catch (error) {
         console.error('Error loading settings:', error)
       }
     },
 
-    // Save settings to storage
     async saveSettings() {
       try {
-        const settings = {
+        await storage.save("settings", {
           selectedVoiceId: self.selectedVoiceId,
           selectedVoiceName: self.selectedVoiceName,
-        }
-        await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(settings))
-        console.log('Settings saved:', settings)
+          availableVoices: self.availableVoices.toJSON()
+        })
       } catch (error) {
         console.error('Error saving settings:', error)
       }
     }
   }))
 
-export interface SettingsStore extends Instance<typeof SettingsStoreModel> {}
-export interface SettingsStoreSnapshot extends SnapshotOut<typeof SettingsStoreModel> {} 
+export interface SettingsStore extends Instance<typeof SettingsStore> {} 

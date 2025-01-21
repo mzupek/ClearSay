@@ -11,20 +11,109 @@ import { speak } from "app/utils/speech"
 type NavigationProps = NativeStackNavigationProp<any>
 
 export const ObjectPracticeScreen = observer(function ObjectPracticeScreen() {
-  const { objectStore } = useStores()
+  const { objectStore, objectSetStore } = useStores()
   const navigation = useNavigation<NavigationProps>()
   const [isSessionActive, setIsSessionActive] = useState(false)
   const [currentObject, setCurrentObject] = useState<any>(null)
   const [showingAnswer, setShowingAnswer] = useState(false)
+  const [sessionScore, setSessionScore] = useState({ correct: 0, total: 0 })
+  const [currentSetId, setCurrentSetId] = useState<string | null>(null)
 
-  const hasObjects = objectStore.objects.length > 0
+  const getActiveObjects = () => {
+    const activeSets = objectSetStore.activeSets
+    const activeObjectIds = new Set(activeSets.flatMap(set => set.objectIds))
+    return objectStore.objects.filter(obj => activeObjectIds.has(obj.id))
+  }
 
-  const handleStartPractice = () => {
-    if (hasObjects) {
-      const session = objectStore.startSession()
-      setCurrentObject(session.objects[session.currentIndex])
+  const handleManageSets = () => {
+    const sets = objectSetStore.setList
+    Alert.alert(
+      "Manage Practice Sets",
+      "Which sets would you like to practice with?\n\nCurrently active sets:\n" + 
+      objectSetStore.activeSets.map(set => `• ${set.name}`).join('\n'),
+      [
+        { text: "Close", style: "cancel" },
+        {
+          text: "Select Sets",
+          onPress: () => {
+            // Show multi-select dialog for sets
+            Alert.alert(
+              "Select Sets",
+              "Tap sets to toggle them on/off:",
+              sets.map(set => ({
+                text: `${set.name} (${set.isActive ? "✓" : "×"})`,
+                onPress: () => {
+                  objectSetStore.toggleSetActive(set.id)
+                  // Refresh the selection dialog
+                  handleManageSets()
+                }
+              })),
+              { cancelable: true }
+            )
+          }
+        }
+      ]
+    )
+  }
+
+  const startPractice = () => {
+    const activeSets = objectSetStore.activeSets
+    if (activeSets.length === 0) {
+      Alert.alert(
+        "No Active Sets",
+        "Please select at least one object set to practice."
+      )
+      return
+    }
+
+    if (activeSets.length === 1) {
+      const activeSet = activeSets[0]
+      setCurrentSetId(activeSet.id)
+      const setObjects = activeSet.objectIds
+        .map(id => objectStore.objects.find(obj => obj.id === id))
+        .filter(Boolean)
+      
+      if (setObjects.length === 0) {
+        Alert.alert(
+          "Empty Set",
+          "The selected set has no objects. Please add objects to the set."
+        )
+        return
+      }
+
+      const shuffledObjects = [...setObjects].sort(() => Math.random() - 0.5)
+      setSessionScore({ correct: 0, total: 0 })
+      setCurrentObject(shuffledObjects[0])
       setIsSessionActive(true)
       setShowingAnswer(false)
+    } else {
+      Alert.alert(
+        "Select Set",
+        "Which set would you like to practice?",
+        activeSets.map(set => ({
+          text: set.name,
+          onPress: () => {
+            setCurrentSetId(set.id)
+            const setObjects = set.objectIds
+              .map(id => objectStore.objects.find(obj => obj.id === id))
+              .filter(Boolean)
+            
+            if (setObjects.length === 0) {
+              Alert.alert(
+                "Empty Set",
+                "The selected set has no objects. Please add objects to the set."
+              )
+              return
+            }
+
+            const shuffledObjects = [...setObjects].sort(() => Math.random() - 0.5)
+            setSessionScore({ correct: 0, total: 0 })
+            setCurrentObject(shuffledObjects[0])
+            setIsSessionActive(true)
+            setShowingAnswer(false)
+          }
+        }))
+      )
     }
   }
 
@@ -51,15 +140,23 @@ export const ObjectPracticeScreen = observer(function ObjectPracticeScreen() {
   }
 
   const handleAnswerResponse = (correct: boolean) => {
-    if (!currentObject) return
+    if (!currentObject || !currentSetId) return
 
-    // Update score
-    if (correct) {
-      currentObject.correctAttempts++
-    }
-    currentObject.attempts++
+    const currentSet = objectSetStore.getSetById(currentSetId)
+    if (!currentSet) return
 
-    // Move to next object or end session
+    objectStore.updateObjectScore(
+      currentObject.id,
+      correct,
+      currentSet.id,
+      currentSet.name
+    )
+
+    setSessionScore(prev => ({
+      correct: prev.correct + (correct ? 1 : 0),
+      total: prev.total + 1
+    }))
+
     const nextIndex = objectStore.objects.indexOf(currentObject) + 1
     if (nextIndex < objectStore.objects.length) {
       setCurrentObject(objectStore.objects[nextIndex])
@@ -67,7 +164,7 @@ export const ObjectPracticeScreen = observer(function ObjectPracticeScreen() {
     } else {
       Alert.alert(
         "Practice Complete",
-        "You've completed all objects!",
+        `Session complete!\nTotal correct: ${sessionScore.correct + (correct ? 1 : 0)}\nTotal attempts: ${sessionScore.total + 1}`,
         [
           {
             text: "OK",
@@ -75,6 +172,7 @@ export const ObjectPracticeScreen = observer(function ObjectPracticeScreen() {
               setIsSessionActive(false)
               setCurrentObject(null)
               setShowingAnswer(false)
+              setSessionScore({ correct: 0, total: 0 })
             }
           }
         ]
@@ -111,71 +209,74 @@ export const ObjectPracticeScreen = observer(function ObjectPracticeScreen() {
         <View style={$header}>
           <Text preset="heading" text="Object Practice" style={$title} />
           <Button
-            text="Exit"
+            text="⬅️ Exit"
             onPress={handleExitSession}
             style={[$button, $exitButton]}
+            textStyle={$whiteText}
           />
         </View>
         
         {!isSessionActive ? (
-          hasObjects ? (
+          <View style={$startContainer}>
+            <Text preset="heading" text="Practice Objects" style={$title} />
             <View style={$buttonContainer}>
               <Button
-                text="Start Practice"
-                onPress={handleStartPractice}
-                style={$button}
+                text="Start Practice ➡️"
+                onPress={startPractice}
+                style={[$button, $practiceButton]}
+                textStyle={$whiteText}
               />
               <Button
-                text="Object Settings"
-                onPress={() => navigation.navigate("ObjectSettings")}
-                style={$button}
+                text="Select Object Sets ☑️"
+                onPress={handleManageSets}
+                style={[$button, $ordersetsButton]}
+                textStyle={$whiteText}
               />
             </View>
-          ) : (
-            <View style={$messageContainer}>
-              <Text 
-                text="No objects available. Add some objects in settings first."
-                style={$message}
-              />
-              <Button
-                text="Go to Settings"
-                onPress={() => navigation.navigate("ObjectSettings")}
-                style={[$settingsButton, $button]}
-                textStyle={$blackText}
-              />
-            </View>
-          )
+          </View>
         ) : (
           <View style={$practiceContainer}>
             {currentObject && (
               <>
                 <View style={$flashCard}>
-                  <Image source={{ uri: currentObject.uri }} style={$image} />
+                  <Image 
+                    source={currentObject.isDefault ? currentObject.uri : { uri: currentObject.uri.uri }}
+                    style={$image}
+                    resizeMode="cover"
+                  />
                   <Text text={currentObject.name} style={$wordText} />
+                  <Text 
+                    text={`Session Score: ${sessionScore.correct}/${sessionScore.total}`} 
+                    style={$scoreText}
+                  />
                 </View>
                 <View style={$actionButtons}>
                   <Button
-                    text="Say Word"
+                    text="Say Word 🎤"
                     onPress={handleSpeak}
-                    style={$button}
+                    style={[$button, $sayButton]}
+                    textStyle={$whiteText}
                   />
                   <Button
-                    text="Spell Word"
+                    text="Spell Word 🐝"
                     onPress={handleSpellWord}
-                    style={$button}
+                    style={[$button, $spellButton]}
+                    textStyle={$whiteText}
                   />
-                  <View style={$responseButtons}>
-                    <Button
-                      text="Got it Wrong"
-                      onPress={() => handleAnswerResponse(false)}
-                      style={[$button, $wrongButton]}
-                    />
-                    <Button
-                      text="Got it Right"
-                      onPress={() => handleAnswerResponse(true)}
-                      style={[$button, $rightButton]}
-                    />
-                  </View>
+                </View>
+                <View style={$responseButtons}>
+                  <Button
+                    text="Got it Wrong ❌"
+                    onPress={() => handleAnswerResponse(false)}
+                    style={[$button, $wrongButton]}
+                    textStyle={$whiteText}
+                  />
+                  <Button
+                    text="Got it Right ✅"
+                    onPress={() => handleAnswerResponse(true)}
+                    style={[$button, $rightButton]}
+                    textStyle={$whiteText}
+                  />
                 </View>
               </>
             )}
@@ -205,22 +306,14 @@ const $title: ViewStyle = {
 
 const $buttonContainer: ViewStyle = {
   gap: spacing.medium,
+  marginTop: spacing.large,
 }
 
-const $messageContainer: ViewStyle = {
+const $startContainer: ViewStyle = {
   flex: 1,
   justifyContent: "center",
   alignItems: "center",
   gap: spacing.medium,
-}
-
-const $message: ViewStyle = {
-  textAlign: "center",
-}
-
-const $button: ViewStyle = {
-  minWidth: 200,
-  alignSelf: "center",
 }
 
 const $practiceContainer: ViewStyle = {
@@ -243,8 +336,9 @@ const $flashCard: ViewStyle = {
 }
 
 const $actionButtons: ViewStyle = {
-  gap: spacing.medium,
+  gap: spacing.small,
   alignItems: 'center',
+  flexDirection: 'row',
 }
 
 const $image: ImageStyle = {
@@ -262,20 +356,20 @@ const $wordText: TextStyle = {
 
 const $responseButtons: ViewStyle = {
   flexDirection: "row",
-  gap: spacing.medium,
+  gap: spacing.small,
+  alignItems: 'center',
 }
 
 const $wrongButton: ViewStyle = {
-  backgroundColor: colors.error,
+  backgroundColor: 'darkred',
 }
 
 const $rightButton: ViewStyle = {
-  backgroundColor: colors.success,
+  backgroundColor: 'darkgreen',
 }
 
-const $settingsButton: ViewStyle = {
-  backgroundColor: 'yellow',
-  minWidth: 100,
+const $selectSetsButton: ViewStyle = {
+  backgroundColor: colors.palette.neutral700,
 }
 
 const $exitButton: ViewStyle = {
@@ -284,16 +378,62 @@ const $exitButton: ViewStyle = {
   borderRadius: 10,
 }
 
-const $whiteText: TextStyle = {
-  color: 'white',
-  fontSize: 24,
-  fontWeight: "bold",
-  lineHeight: 30
+const $scoreText: TextStyle = {
+  fontSize: 16,
+  color: colors.text,
+  marginTop: spacing.small,
 }
 
-const $blackText: TextStyle = {
-  color: 'black',
-  fontSize: 24,
-  fontWeight: "bold",
-  lineHeight: 30
+const $button: ViewStyle = {
+  padding: 10,
+  minWidth: 200,
+}
+
+const $sayButton: ViewStyle = {
+  backgroundColor: colors.palette.accent500,
+}
+
+const $spellButton: ViewStyle = {
+  backgroundColor: 'blue',
+}
+
+const $whiteText: TextStyle = {
+  color: 'white', 
+  fontWeight: 'bold',
+  fontSize: 22,
+  lineHeight: 24,
+}
+
+const $practiceButton: ViewStyle = {
+  backgroundColor: 'green',
+  borderRadius: 10,
+  padding: 10,
+  minHeight: 80,
+  shadowColor: 'black',
+  shadowOffset: { width: 5, height: 5 },
+  shadowOpacity: 1,
+  shadowRadius: 5,
+  elevation: 5,
+  minWidth: '85%',
+}
+
+const $ordersetsButton: ViewStyle = {
+  backgroundColor: colors.palette.accent500,
+  borderRadius: 10,
+  padding: 10,
+  minHeight: 80,
+  shadowColor: 'black',
+  shadowOffset: { width: 5, height: 5 },
+  shadowOpacity: 1,
+  shadowRadius: 5,
+  elevation: 5,
+  minWidth: '85%',
+}
+
+const $checkIcon: ImageStyle = {
+  width: 24,
+  height: 24,
+  marginLeft: spacing.small,
+  tintColor: 'white',
+  
 }

@@ -221,7 +221,7 @@ export const ObjectSettingsScreen = observer(function ObjectSettingsScreen() {
                   objectStore.addObject({
                     id: Date.now().toString(),
                     name: name.trim(),
-                    uri: uri,
+                    uri: { uri },
                     attempts: 0,
                     correctAttempts: 0
                   })
@@ -261,56 +261,48 @@ export const ObjectSettingsScreen = observer(function ObjectSettingsScreen() {
 
   return (
     <Screen preset="scroll" safeAreaEdges={["top"]}>
-      <View style={$screenContainer}>
-        <Text 
-          text="Object Settings" 
-          preset="heading" 
-          style={$title}
-        />
-        
-        <Button
-          text="Manage Object Sets"
-          onPress={() => navigation.navigate("ObjectSet")}
-          style={[$manageButton]}
-        />
-
-        <Button
-          text={Platform.isMacOS ? "Select Image" : "Add Photo"}
-          onPress={handleImageSelection}
-          style={$addButton}
-          disabled={isLoading}
-        />
-
-        <ScrollView>
-          <View style={$photoList}>
-            {objectStore.objects.map((object) => (
-              <View key={object.id} style={$photoItem}>
-                <Image source={{ uri: object.uri }} style={$photoImage} />
-                <View style={$photoDetails}>
-                  <Text text={object.name} style={$photoName} />
-                  <View style={$actionButtons}>
-                    <Button
-                      text="Add to Set"
-                      onPress={() => handleAddToSet(object)}
-                      style={[$actionButton, $addToSetButton]}
-                    />
-                    <Button
-                      text="Delete"
-                      onPress={() => handleDeletePhoto(object.id)}
-                      style={[$actionButton, $deleteButton]}
-                    />
-                  </View>
-                </View>
+      <View style={$container}>
+        <Text preset="heading" text="Object Settings" style={$title} />
+        <View style={$buttonContainer}>
+          <Button
+            text="Add New Object"
+            onPress={handleImageSelection}
+            style={[$addButton]}
+            textStyle={$whiteText}
+          />
+          <Button
+            text="Manage Object Sets"
+            onPress={() => navigation.navigate("ObjectSet")}
+            style={$manageButton}
+            textStyle={$whiteText}
+          />
+        </View>
+        <ScrollView style={$scrollView}>
+          {objectStore.objectList.map((obj) => (
+            <View key={obj.id} style={$objectContainer}>
+              <Image 
+                source={obj.isDefault ? obj.uri : { uri: obj.uri.uri }}
+                style={$objectImage}
+                resizeMode="cover"
+              />
+              <View style={$textContainer}>
+                <Text text={obj.name} style={$objectName} />
               </View>
-            ))}
-          </View>
+              <Button
+                text="Remove"
+                onPress={() => objectStore.removeObject(obj.id)}
+                style={[$removeButton]}
+                textStyle={$whiteText}
+              />
+            </View>
+          ))}
         </ScrollView>
       </View>
     </Screen>
   )
 })
 
-const $screenContainer: ViewStyle = {
+const $container: ViewStyle = {
   flex: 1,
   padding: spacing.medium,
 }
@@ -320,93 +312,75 @@ const $title: TextStyle = {
   textAlign: "center",
 }
 
-const $addButton: ViewStyle = {
+const $buttonContainer: ViewStyle = {
+  flexDirection: "column",
+  gap: spacing.small,
   marginBottom: spacing.medium,
-  backgroundColor: 'green',
 }
 
-const $photoList: ViewStyle = {
+const $button: ViewStyle = {
+  marginBottom: spacing.medium,
+  backgroundColor: colors.palette.neutral800,
+}
+
+const $scrollView: ViewStyle = {
   flex: 1,
 }
 
-const $photoItem: ViewStyle = {
-  flexDirection: 'row',
-  alignItems: 'center',
+const $objectContainer: ViewStyle = {
+  flexDirection: "row",
+  alignItems: "center",
   padding: spacing.small,
   marginBottom: spacing.medium,
   backgroundColor: colors.palette.neutral100,
   borderRadius: 8,
 }
 
-const $photoImage: ImageStyle = {
+const $textContainer: ViewStyle = {
+  flex: 1,
+  marginHorizontal: spacing.medium,
+}
+
+const $objectImage: ImageStyle = {
   width: 60,
   height: 60,
   borderRadius: 4,
-  marginRight: spacing.medium,
 }
 
-const $photoDetails: ViewStyle = {
-  flex: 1,
+const $objectName: TextStyle = {
+  fontSize: 16,
 }
 
-const $photoName: TextStyle = {
-  marginBottom: spacing.extraSmall,
-}
-
-const $actionButtons: ViewStyle = {
-  flexDirection: 'row',
-  gap: spacing.extraSmall,
-}
-
-const $actionButton: ViewStyle = {
-  minWidth: 100,
-}
-
-const $addToSetButton: ViewStyle = {
-  backgroundColor: colors.palette.secondary500,
-}
-
-const $deleteButton: ViewStyle = {
+const $removeButton: ViewStyle = {
+  minWidth: 80,
   backgroundColor: colors.palette.angry500,
+  padding:10
+}
+
+const $addButton: ViewStyle = {
+  backgroundColor: 'darkgreen',
+  minWidth: 100,
+  shadowColor: 'black',
+  shadowOffset: { width: 5, height: 5 },
+  shadowOpacity: 1,
+  shadowRadius: 5,
+  elevation: 5,
+  borderRadius: 8,
 }
 
 const $manageButton: ViewStyle = {
-  marginBottom: spacing.medium,
-  backgroundColor: colors.palette.secondary500,
-}
-
-const $setContainer: ViewStyle = {
-  marginTop: spacing.extraLarge,
-  padding: spacing.medium,
-  backgroundColor: colors.palette.neutral100,
+  backgroundColor: colors.palette.accent500,
+  minWidth: 100,
+  shadowColor: 'black',
+  shadowOffset: { width: 5, height: 5 },
+  shadowOpacity: 1,
+  shadowRadius: 5,
+  elevation: 5,
   borderRadius: 8,
 }
 
-const $setName: TextStyle = {
-  fontSize: 18,
-  fontWeight: "bold",
-  marginBottom: spacing.small,
-}
-
-const $imageGrid: ViewStyle = {
-  flexDirection: "row",
-  flexWrap: "wrap",
-  gap: spacing.small,
-}
-
-const $imageContainer: ViewStyle = {
-  width: 100,
-  alignItems: "center",
-}
-
-const $image: ImageStyle = {
-  width: 80,
-  height: 80,
-  borderRadius: 8,
-}
-
-const $imageName: TextStyle = {
-  fontSize: 12,
-  textAlign: "center",
-  marginTop: spacing.extraSmall,
-}
+const $whiteText: TextStyle = {
+  color: 'white',
+  fontSize: 22,
+  lineHeight: 22,
+} 

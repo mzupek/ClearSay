@@ -104,7 +104,7 @@ export const SettingsScreen = () => {
 
 const $screenContainer: ViewStyle = {
   flex: 1,
-  padding: spacing.lg,
+  padding: spacing.large,
   backgroundColor: colors.background,
 }
 
@@ -127,4 +127,5 @@ const $voiceList: ViewStyle = {
 const $testButton: ViewStyle = {
   minWidth: 80,
   marginLeft: spacing.medium,
+  marginBottom: spacing.medium,
 } 
