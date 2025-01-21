@@ -37,11 +37,6 @@ import * as Permissions from 'expo-permissions'
 import { useStores } from "./models"
 import { View } from "react-native"
 import { colors } from "./theme"
-import React from "react"
-import { useColorScheme } from "react-native"
-import { GestureHandlerRootView } from "react-native-gesture-handler"
-import { ViewStyle } from "react-native"
-import * as SplashScreen from "expo-splash-screen"
 
 export const NAVIGATION_PERSISTENCE_KEY = "NAVIGATION_STATE"
 
@@ -81,16 +76,17 @@ interface AppProps {
 export const App: React.FC<AppProps> = function App(props) {
   console.log("App component rendering")
   
-  const colorScheme = useColorScheme()
   const {
-    initialNavigationState,
-    onNavigationStateChange,
-    isRestored: isNavigationStateRestored,
-  } = useNavigationPersistence(storage, NAVIGATION_PERSISTENCE_KEY)
-
-  const { rehydrated } = useInitialRootStore(() => {
-    // This runs after the root store has been initialized and rehydrated.
-    SplashScreen.hideAsync()
+    rehydrated,
+    rootStore,
+  } = useInitialRootStore(async () => {
+    console.log("RootStore initialization callback")
+    try {
+      await props.hideSplashScreen?.()
+      console.log("Splash screen hidden")
+    } catch (error) {
+      console.error("Error hiding splash screen:", error)
+    }
   })
 
   const { settingsStore } = useStores()
@@ -106,25 +102,19 @@ export const App: React.FC<AppProps> = function App(props) {
     }
   }, [rehydrated])
 
-  if (!rehydrated || !isNavigationStateRestored) return null
+  if (!rehydrated) {
+    console.log("Showing loading view")
+    return (
+      <View style={{ flex: 1, backgroundColor: colors.background }} />
+    )
+  }
 
   console.log("Rendering full app")
   return (
-    <SafeAreaProvider initialMetrics={initialWindowMetrics}>
-      <GestureHandlerRootView style={$container}>
-        <ErrorBoundary catchErrors="always">
-          <KeyboardProvider>
-            <AppNavigator
-              initialState={initialNavigationState}
-              onStateChange={onNavigationStateChange}
-            />
-          </KeyboardProvider>
-        </ErrorBoundary>
-      </GestureHandlerRootView>
-    </SafeAreaProvider>
+    <ErrorBoundary catchErrors="always">
+      <KeyboardProvider>
+        <AppNavigator />
+      </KeyboardProvider>
+    </ErrorBoundary>
   )
-}
-
-const $container: ViewStyle = {
-  flex: 1,
 }

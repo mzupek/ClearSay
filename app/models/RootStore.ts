@@ -3,7 +3,6 @@ import { AuthenticationStoreModel } from "./AuthenticationStore"
 import { EpisodeStoreModel } from "./EpisodeStore"
 import { PracticeStoreModel } from "./PracticeStore"
 import { SettingsStoreModel } from "./SettingsStore"
-import { ObjectStoreModel } from "./ObjectStore"
 
 /**
  * A RootStore model.
@@ -15,7 +14,6 @@ export const RootStoreModel = types
     episodeStore: types.optional(EpisodeStoreModel, {}),
     practiceStore: types.optional(PracticeStoreModel, {}),
     settingsStore: types.optional(SettingsStoreModel, {}),
-    objectStore: types.optional(ObjectStoreModel, {}),
   })
   .actions((self) => ({
     reset() {
