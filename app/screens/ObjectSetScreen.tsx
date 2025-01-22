@@ -100,7 +100,7 @@ export const ObjectSetScreen = observer(function ObjectSetScreen() {
   }
 
   return (
-    <Screen preset="scroll" safeAreaEdges={["top"]}>
+    <Screen preset="scroll">
       <View style={$container}>
         <View style={$header}>
           <Text preset="heading" text="Object Sets" style={$title} />

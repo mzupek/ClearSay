@@ -57,7 +57,7 @@ export const ObjectProgressScreen = observer(function ObjectProgressScreen() {
   const dailyStats = getDailyStats()
 
   return (
-    <Screen preset="scroll" safeAreaEdges={["top"]} style={$screenContainer}>
+    <Screen preset="scroll" contentContainerStyle={$screenContainer}>
       <View style={$mainContainer}>
         <Text text="Object Progress" preset="heading" style={$title} />
         

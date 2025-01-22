@@ -204,7 +204,7 @@ export const ObjectPracticeScreen = observer(function ObjectPracticeScreen() {
   }
 
   return (
-    <Screen preset="scroll" safeAreaEdges={["top"]}>
+    <Screen preset="scroll">
       <View style={$container}>
         <View style={$header}>
           <Text preset="heading" text="Object Practice" style={$title} />
@@ -218,7 +218,7 @@ export const ObjectPracticeScreen = observer(function ObjectPracticeScreen() {
         
         {!isSessionActive ? (
           <View style={$startContainer}>
-            <Text preset="heading" text="Practice Objects" style={$title} />
+            {/* <Text preset="heading" text="Practice Objects" style={$title} /> */}
             <View style={$buttonContainer}>
               <Button
                 text="Start Practice ➡️"
@@ -290,18 +290,19 @@ export const ObjectPracticeScreen = observer(function ObjectPracticeScreen() {
 const $container: ViewStyle = {
   flex: 1,
   padding: spacing.medium,
+  // alignItems: 'center',
 }
 
 const $header: ViewStyle = {
   flexDirection: "row",
   justifyContent: "space-between",
-  alignItems: "center",
+  // alignItems: "center",
   marginBottom: spacing.large,
 }
 
 const $title: ViewStyle = {
   marginBottom: spacing.large,
-  textAlign: "center",
+  marginRight: spacing.large,
 }
 
 const $buttonContainer: ViewStyle = {
@@ -386,7 +387,7 @@ const $scoreText: TextStyle = {
 
 const $button: ViewStyle = {
   padding: 10,
-  minWidth: 200,
+  // minWidth: 200,
 }
 
 const $sayButton: ViewStyle = {

@@ -1,5 +1,5 @@
 import React from "react"
-import { View, ViewStyle, TouchableOpacity, Alert, TextStyle } from "react-native"
+import { View, ViewStyle, TouchableOpacity, Alert, TextStyle, Dimensions } from "react-native"
 import { observer } from "mobx-react-lite"
 import { Screen, Text, Button } from "app/components"
 import { useStores } from "app/models"
@@ -59,11 +59,9 @@ export const PracticeScreen = observer(function PracticeScreen() {
       return selectedChars[key] && results[key]
     }).length
 
-    const totalTargets = currentChars.filter(char => 
-      char === practiceStore.currentCharacter
-    ).length
-
-    practiceStore.markCharacterFound(foundCount)
+    const incorrectCount = Object.values(results).filter(result => !result).length
+    
+    practiceStore.markCharacterFound(foundCount, incorrectCount)
 
     if (practiceStore.currentRound === 10) {
       practiceStore.recordSession()
@@ -95,7 +93,7 @@ export const PracticeScreen = observer(function PracticeScreen() {
 
   if (!practiceStore.isSessionActive) {
     return (
-      <Screen preset="scroll" safeAreaEdges={["top"]} style={$container}>
+      <Screen preset="scroll" contentContainerStyle={$container}>
         <Text text="Find the Character Activity" style={$title} />
         <Button
           text="Start Practice ➡️"
@@ -114,7 +112,7 @@ export const PracticeScreen = observer(function PracticeScreen() {
   }
 
   return (
-    <Screen preset="scroll" safeAreaEdges={["top"]} style={$container}>
+    <Screen preset="scroll" contentContainerStyle={$container}>
       <View style={$header}>
         <Text text={`Round: ${practiceStore.currentRound}/10`} style={$score} />
         <Text text={`Accuracy: ${practiceStore.accuracy()}%`} style={$score} />
@@ -231,28 +229,30 @@ const $characterGrid: ViewStyle = {
   flexDirection: "row",
   flexWrap: "wrap",
   justifyContent: "center",
-  gap: spacing.medium,
+  gap: spacing.small,
   backgroundColor: 'blue',
   padding: spacing.large,
   borderRadius: 10,
   borderColor: 'black',
   borderWidth: 4,
   marginBottom: spacing.large,
+  width: Dimensions.get('window').width < 768 ? "100%" : "auto",
 }
 
 const $characterButton: ViewStyle = {
-  width: 60,
-  height: 60,
+  width: Dimensions.get('window').width < 768 ? "22%" : 60,
+  aspectRatio: 1,
   backgroundColor: colors.palette.neutral200,
   borderRadius: 8,
   justifyContent: "center",
   alignItems: "center",
+  // margin: "1%",
 }
 
 const $characterText: TextStyle = {
   fontSize: 32,
   fontWeight: "bold",
-  lineHeight: 50
+  lineHeight: 60
 }
 
 const $button: ViewStyle = {

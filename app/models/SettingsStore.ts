@@ -27,16 +27,20 @@ export const SettingsStore = types
       this.saveSettings()
     },
 
+    setSettings(settings: any) {
+      if (settings) {
+        self.selectedVoiceId = settings.selectedVoiceId || ""
+        self.selectedVoiceName = settings.selectedVoiceName || ""
+        if (settings.availableVoices) {
+          self.availableVoices.replace(settings.availableVoices)
+        }
+      }
+    },
+
     async loadSettings() {
       try {
         const settings = await storage.load("settings")
-        if (settings) {
-          self.selectedVoiceId = settings.selectedVoiceId
-          self.selectedVoiceName = settings.selectedVoiceName
-          if (settings.availableVoices) {
-            self.availableVoices.replace(settings.availableVoices)
-          }
-        }
+        this.setSettings(settings)
       } catch (error) {
         console.error('Error loading settings:', error)
       }

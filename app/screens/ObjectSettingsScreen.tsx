@@ -260,7 +260,7 @@ export const ObjectSettingsScreen = observer(function ObjectSettingsScreen() {
   }, [])
 
   return (
-    <Screen preset="scroll" safeAreaEdges={["top"]}>
+    <Screen preset="scroll">
       <View style={$container}>
         <Text preset="heading" text="Object Settings" style={$title} />
         <View style={$buttonContainer}>

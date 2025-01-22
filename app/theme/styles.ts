@@ -8,8 +8,8 @@ export const $styles = {
   flexWrap: { flexWrap: "wrap" } as ViewStyle,
 
   container: {
-    paddingTop: spacing.lg + spacing.xl,
-    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.large + spacing.extraLarge,
+    paddingHorizontal: spacing.large,
   } as ViewStyle,
 
   toggleInner: {
