@@ -1,490 +1,400 @@
-import { useState, useEffect } from "react"
+import React, { useEffect } from "react"
+import { View, ViewStyle, TouchableOpacity, Alert, TextStyle, Dimensions } from "react-native"
 import { observer } from "mobx-react-lite"
-import { View, ViewStyle, TextStyle } from "react-native"
-import { Button, Screen, Text, Icon } from "app/components"
+import { Screen, Text, Button, ProgressBar } from "app/components"
 import { useStores } from "app/models"
 import { colors, spacing } from "app/theme"
-import { speakCharacter, stopSpeaking } from "app/utils/speech"
-import { setupSpeechRecognition, startListening, stopListening, destroyRecognizer } from "app/utils/speechRecognition"
-import Voice, { SpeechResultsEvent } from '@react-native-voice/voice'
-import * as Speech from 'expo-speech'
 import { useNavigation } from "@react-navigation/native"
+import { ObjectTabParamList } from "app/navigators/ObjectNavigator"
+import { CompositeScreenProps } from "@react-navigation/native"
+import { BottomTabScreenProps } from "@react-navigation/bottom-tabs"
+import { useHeader } from "app/utils/useHeader"
+import * as Speech from "expo-speech"
 
-export const PracticeScreen = observer(function PracticeScreen() {
-  const navigation = useNavigation()
+interface PracticeScreenProps extends BottomTabScreenProps<ObjectTabParamList, "ObjectPractice"> {}
+
+export const PracticeScreen = observer(function PracticeScreen(_props: PracticeScreenProps) {
   const { practiceStore } = useStores()
-  const { settingsStore } = useStores()
-  const [isPlaying, setIsPlaying] = useState(false)
-  const [isListening, setIsListening] = useState(false)
-  const [instruction, setInstruction] = useState("Press Play to hear the character")
-  const [listenError, setListenError] = useState<string | null>(null)
+  const navigation = useNavigation()
 
-  // Initialize the practice session
+  useHeader({
+    title: "Visual Scanning",
+    leftIcon: "back",
+    onLeftPress: () => navigation.goBack(),
+  })
+
   useEffect(() => {
-    console.log('Initializing practice screen...')
-    
-    // Start session
-    practiceStore.startSession()
-    
-    // Setup speech recognition
-    Voice.onSpeechStart = () => {
-      console.log('Speech started')
-      setIsListening(true)
-      setListenError(null)
+    if (practiceStore.isSessionActive) {
+      Speech.speak(`Find the letter ${practiceStore.currentCharacter}`)
     }
+  }, [practiceStore.currentCharacter, practiceStore.isSessionActive])
 
-    Voice.onSpeechEnd = () => {
-      console.log('Speech ended')
-      setIsListening(false)
-    }
+  const handleCharacterPress = (char: string, index: number) => {
+    const isCorrect = char === practiceStore.currentCharacter && practiceStore.isTargetPosition(index)
+    practiceStore.markPosition(index, isCorrect)
 
-    Voice.onSpeechError = (e: any) => {
-      console.error('Speech error:', e)
-      setListenError(e.error?.message || 'Error listening')
-      setIsListening(false)
-    }
+    if (isCorrect) {
+      practiceStore.removeTargetPosition(index)
+      practiceStore.markCharacterFound(1, 0)
 
-    Voice.onSpeechResults = (e: SpeechResultsEvent) => {
-      console.log('Speech results:', e.value)
-      if (!e.value || e.value.length === 0) {
-        setListenError('No speech detected')
-        setInstruction("Didn't catch that. Try again!")
-        return
-      }
-
-      const spokenText = e.value[0].toLowerCase().trim()
-      const currentChar = practiceStore.currentCharacter.toLowerCase().trim()
-      
-      console.log('Spoken:', spokenText, 'Expected:', currentChar)
-      
-      // Enhanced matching logic
-      const isCorrect = checkPronunciation(spokenText, currentChar)
-      
-      practiceStore.markAttempt(isCorrect)
-      
-      setInstruction(isCorrect ? "Correct! Well done!" : "Not quite. Try again!")
-      
-      setIsListening(false)
-      stopListening()
-    }
-
-    // Cleanup function
-    return () => {
-      console.log('Cleaning up practice screen...')
-      practiceStore.endSession()
-      destroyRecognizer().catch(error => {
-        console.error('Error destroying recognizer:', error)
-      })
-    }
-  }, []) // Empty dependency array means this only runs once on mount
-
-  // Generate initial character after session is started
-  useEffect(() => {
-    if (practiceStore.isSessionActive && !practiceStore.currentCharacter) {
-      console.log('Generating initial character...')
-      practiceStore.generateNewCharacter()
-    }
-  }, [practiceStore.isSessionActive])
-
-  console.log("isSessionActive:", practiceStore.isSessionActive)
-
-  const handlePlaySound = async () => {
-    try {
-      console.log('Playing character:', practiceStore.currentCharacter)
-      setIsPlaying(true)
-      setInstruction("Playing character...")
-      
-      await Speech.speak(practiceStore.currentCharacter, {
-        language: 'en-US',
-        voice: settingsStore.selectedVoiceId || undefined,
-        pitch: 1.0,
-        rate: 0.75,
-        quality: Speech.VoiceQuality.Enhanced,
-        onDone: () => {
-          console.log('Finished playing:', practiceStore.currentCharacter)
-          setIsPlaying(false)
-          setInstruction("Now try saying it yourself!")
-        },
-        onError: () => {
-          console.error('Error playing character:', practiceStore.currentCharacter)
-          setIsPlaying(false)
-          setInstruction("Error playing sound. Try again.")
+      if (practiceStore.getRemainingTargets() === 0) {
+        if (practiceStore.currentRound === 10) {
+          practiceStore.recordSession()
+          showSessionSummary()
+        } else {
+          practiceStore.nextRound()
         }
-      })
-    } catch (error) {
-      console.error('Error playing sound:', error)
-      setIsPlaying(false)
-      setInstruction("Error playing sound. Try again.")
+      }
+    } else {
+      practiceStore.markCharacterFound(0, 1)
     }
   }
 
-  // Optional: Log available voices on component mount
-  useEffect(() => {
-    const checkVoices = async () => {
-      const voices = await Speech.getAvailableVoicesAsync()
-      console.log('Available voices:', voices.map(v => ({
-        id: v.identifier,
-        name: v.name,
-        quality: v.quality
-      })))
-    }
-    checkVoices()
-  }, [])
-
-  const handleSpeakPress = async () => {
-    try {
-      setListenError(null)
-      stopSpeaking()
-      setIsListening(true)
-      setInstruction("Listening... Say the character now!")
-      
-      await startListening()
-    } catch (error) {
-      console.error('Error in handleSpeakPress:', error)
-      setListenError('Failed to start listening')
-      setIsListening(false)
-      setInstruction("Error listening. Try again.")
-    }
-  }
-
-  const handleNextPress = () => {
-    console.log('Next button pressed, generating new character...')
-    practiceStore.generateNewCharacter()
-    setInstruction("Press Play to hear the new character")
-  }
-
-  const getCharacterBoxStyle = () => {
-    if (practiceStore.lastAttemptCorrect === undefined) return $characterBox
-    return [
-      $characterBox,
-      practiceStore.lastAttemptCorrect ? $correctBox : $incorrectBox
-    ]
-  }
-
-  // New helper function for pronunciation checking
-  const checkPronunciation = (spoken: string, expected: string): boolean => {
-    // Common letter pronunciations
-    const letterVariations: Record<string, string[]> = {
-      'a': ['a', 'ay', 'eh'],
-      'b': ['b', 'be', 'bee'],
-      'c': ['c', 'see', 'sea', 'si'],
-      'd': ['d', 'de', 'dee'],
-      'e': ['e', 'ee', 'eh'],
-      'f': ['f', 'ef', 'eff'],
-      'g': ['g', 'ge', 'gee'],
-      'h': ['h', 'he', 'aitch'],
-      'i': ['i', 'eye', 'ai'],
-      'j': ['j', 'je', 'jay'],
-      'k': ['k', 'ka', 'kay'],
-      'l': ['l', 'el', 'ell'],
-      'm': ['m', 'em', 'mm'],
-      'n': ['n', 'en', 'nn'],
-      'o': ['o', 'oh', 'ow'],
-      'p': ['p', 'pe', 'pee'],
-      'q': ['q', 'qu', 'que'],
-      'r': ['r', 'ar', 'are'],
-      's': ['s', 'es', 'ess'],
-      't': ['t', 'te', 'tee'],
-      'u': ['u', 'you', 'yu'],
-      'v': ['v', 've', 'vee'],
-      'w': ['w', 'we', 'double u'],
-      'x': ['x', 'ex', 'eks'],
-      'y': ['y', 'why', 'ye'],
-      'z': ['z', 'ze', 'zee', 'zed']
-    }
-
-    // Number variations
-    const numberVariations: Record<string, string[]> = {
-      '0': ['zero', 'oh', 'null', 'nought'],
-      '1': ['one', 'won', 'want'],
-      '2': ['two', 'too', 'to'],
-      '3': ['three', 'tree'],
-      '4': ['four', 'for', 'fore'],
-      '5': ['five', 'fife'],
-      '6': ['six', 'sicks'],
-      '7': ['seven'],
-      '8': ['eight', 'ate'],
-      '9': ['nine', 'nein']
-    }
-
-    // Clean up spoken text
-    const cleanSpoken = spoken
-      .replace(/letter /i, '')
-      .replace(/the /i, '')
-      .replace(/capital /i, '')
-      .replace(/number /i, '')
-      .replace(/digit /i, '')
-      .trim()
-      .toLowerCase()
-
-    // Determine if we're checking a letter or number
-    const isNumber = /^\d$/.test(expected)
-    const variations = isNumber 
-      ? numberVariations[expected] || [expected]
-      : letterVariations[expected.toLowerCase()] || [expected.toLowerCase()]
-
-    // Check if spoken text matches any valid variation
-    const isMatch = variations.some(variation => {
-      const matches = [
-        cleanSpoken === variation,
-        cleanSpoken === `letter ${variation}`,
-        cleanSpoken === `the letter ${variation}`,
-        cleanSpoken === `number ${variation}`,
-        cleanSpoken === `the number ${variation}`,
-        cleanSpoken === `digit ${variation}`,
-        cleanSpoken === `the digit ${variation}`
+  const handleEndRound = () => {
+    practiceStore.recordSession()
+    const finalScore = practiceStore.accuracy()
+    
+    // Narrate completion and score
+    Speech.speak(`Character complete! Your final score is ${finalScore} percent.`)
+    
+    Alert.alert(
+      "Character Complete!",
+      `Analysis: ${finalScore}%\n\nReady to try a new character?`,
+      [
+        {
+          text: "Start New Character",
+          onPress: () => {
+            practiceStore.startNewGame()
+          }
+        }
       ]
-      return matches.some(match => match === true)
-    })
-
-    console.log('Pronunciation check:', {
-      spoken,
-      cleanSpoken,
-      expected,
-      variations,
-      isMatch
-    })
-
-    return isMatch
+    )
   }
 
-  const handleExitSession = () => {
-    practiceStore.endSession()
-    navigation.navigate("Welcome")
+  const handleEndSession = () => {
+    Alert.alert(
+      "End Session",
+      "Are you sure you want to end this practice session?",
+      [
+        { text: "Cancel", style: "cancel" },
+        { 
+          text: "End Session", 
+          style: "destructive",
+          onPress: () => {
+            showSessionSummary()
+          }
+        }
+      ]
+    )
+  }
+
+  const showSessionSummary = () => {
+    const accuracy = practiceStore.accuracy()
+    const totalFound = practiceStore.correctAnswers
+    const totalAttempts = practiceStore.totalAttempts
+    const incorrectAttempts = practiceStore.incorrectAttempts
+
+    Alert.alert(
+      "Session Complete! 🎉",
+      `Excellent work!\n\n` +
+      `Final Accuracy: ${accuracy}%\n` +
+      `Characters Found: ${totalFound}\n` +
+      `Total Attempts: ${totalAttempts}\n` +
+      `Incorrect Attempts: ${incorrectAttempts}\n\n` +
+      `Would you like to start a new session?`,
+      [
+        {
+          text: "New Session",
+          style: "default",
+          onPress: () => {
+            practiceStore.endSession()
+            practiceStore.startNewGame()
+          }
+        },
+        {
+          text: "Exit to Welcome",
+          style: "cancel",
+          onPress: () => {
+            practiceStore.endSession()
+            navigation.goBack()
+          }
+        }
+      ],
+      { cancelable: false }
+    )
+  }
+
+  const renderCharacterButton = (char: string, index: number) => {
+    const isSelected = practiceStore.isPositionSelected(index)
+    const wasCorrect = practiceStore.wasSelectionCorrect(index)
+
+    return (
+      <TouchableOpacity
+        key={index}
+        style={[
+          $characterButton,
+          isSelected && (wasCorrect ? $correctButton : $incorrectButton)
+        ]}
+        onPress={() => handleCharacterPress(char, index)}
+        disabled={isSelected}
+      >
+        <Text
+          style={[
+            $characterText,
+            isSelected && $selectedCharacterText
+          ]}
+        >
+          {char}
+        </Text>
+      </TouchableOpacity>
+    )
+  }
+
+  if (!practiceStore.isSessionActive) {
+    return (
+      <Screen preset="scroll" contentContainerStyle={$startContainer}>
+        <Text text="Visual Scanning" style={$title} />
+        
+        <View style={$startContent}>
+          <ProgressBar
+            current={practiceStore.currentRound}
+            total={10}
+            message={practiceStore.currentRound === 1 
+              ? "Complete 10 rounds to finish the session" 
+              : `Round ${practiceStore.currentRound} of 10`}
+          />
+
+          <Button
+            text="Start Practice ➡️"
+            onPress={() => practiceStore.startNewGame()}
+            style={$startButton}
+            textStyle={$whiteText}
+          />
+        </View>
+      </Screen>
+    )
   }
 
   return (
-    <Screen preset="fixed" safeAreaEdges={["top"]} style={$screenContainer}>
-      <View style={$mainContainer}>
-        
-
-        {/* Score Section */}
-        <View style={$scoreSection}>
-          <Text text={`Score: ${practiceStore.currentScore}`} style={$scoreText} />
-          <Text text={`Accuracy: ${practiceStore.accuracy}%`} style={$scoreText} />
+    <Screen preset="scroll" contentContainerStyle={$container}>
+      <View style={$mainContent}>
+        <View style={$header}>
+          <Text text={`Round: ${practiceStore.currentRound}/10`} style={$score} />
+          <Text text={`Accuracy: ${practiceStore.accuracy()}%`} style={$score} />
         </View>
 
-        {/* Character Section */}
-        <View style={$characterSection}>
-          <View style={getCharacterBoxStyle()}>
-            <Text text={practiceStore.currentCharacter} style={$characterText} />
-          </View>
+        <ProgressBar
+          current={practiceStore.currentRound}
+          total={10}
+          showNumbers={true}
+          style={$gameProgressBar}
+        />
 
-          <Text text={instruction} style={$instruction} />
+        <View style={$flashCard}>
+          <Text text="Find all:" style={$instruction} />
+          <Text text={practiceStore.currentCharacter} style={$targetChar} />
+          <Text text={`Remaining: ${practiceStore.getRemainingTargets()}`} style={$remainingText} />
+        </View>
 
-          {listenError && (
-            <View style={$errorBox}>
-              <Text text={listenError} style={{ color: colors.error }} />
-            </View>
+        <View style={$characterGrid}>
+          {practiceStore.getCurrentRoundCharacters().map((char, index) =>
+            renderCharacterButton(char, index),
           )}
-
-          <View style={$buttonSection}>
-            <Button
-              preset="default"
-              onPress={handlePlaySound}
-              disabled={isPlaying || isListening}
-              LeftAccessory={() => (
-                <Icon 
-                  icon="bell" 
-                  size={22} 
-                  color={isPlaying ? colors.palette.neutral300 : colors.palette.neutral500}
-                />
-              )}
-              text={isPlaying ? "Playing..." : "Play"}
-              style={$button}
-            />
-
-            <Button
-              preset="default"
-              text={isListening ? "Listening..." : "Speak"}
-              onPress={handleSpeakPress}
-              disabled={isListening || isPlaying}
-              style={$button}
-            />
-
-            <Button
-              preset="default"
-              text="Next"
-              onPress={handleNextPress}
-              disabled={isListening || isPlaying}
-              style={$button}
-            />
-
-            <Button
-              preset="default"
-              text="Exit Session"
-              onPress={handleExitSession}
-              style={$exitButton}
-            />
-                 
-
-          </View>
         </View>
       </View>
+
+      <Button
+        text="End Session"
+        onPress={handleEndSession}
+        style={$exitButton}
+        textStyle={$exitButtonText}
+      />
     </Screen>
   )
 })
 
-const $screenContainer: ViewStyle = {
+const $container: ViewStyle = {
   flex: 1,
-  backgroundColor: colors.background,
-  height: "100%",
+  padding: spacing.small,
 }
 
-// const $welcomeContainer: ViewStyle = {
-//   flex: 1,
-//   backgroundColor: colors.background,
-//   minHeight: "100%",
-//   paddingHorizontal: 20,
-// }
-
-// const $contentContainer: ViewStyle = {
-//   flex: 0.8,  // 80% of parent
-//   paddingTop: 0,
-//   alignItems: "center",
-// }
-
-// const $title: TextStyle = {
-//   fontSize: 32,
-//   color: colors.text,
-//   marginBottom: 20,
-//   minHeight: 50,
-//   paddingTop: 20,
-// }
-
-// const $text: TextStyle = {
-//   fontSize: 16,
-//   color: colors.text,
-//   marginBottom: 10,
-// }
-
-// const $buttonContainer: ViewStyle = {
-//   flex: 0.2,  // 20% of parent
-//   alignItems: "center",
-//   justifyContent: "center",
-// }
-
-const $mainContainer: ViewStyle = {
+const $mainContent: ViewStyle = {
   flex: 1,
-  paddingHorizontal: 20,
-}
-
-const $characterSection: ViewStyle = {
-  marginTop: 150,
   alignItems: "center",
 }
 
-const $characterBox: ViewStyle = {
-  width: 200,
-  height: 200,
-  backgroundColor: colors.background,
-  justifyContent: "center",
-  alignItems: "center",
-  borderWidth: 2,
-  borderColor: colors.palette.neutral400,
-  marginBottom: 20,
-  borderRadius: 4,
+const $header: ViewStyle = {
+  flexDirection: "row",
+  justifyContent: "space-between",
+  width: "100%",
+  marginBottom: spacing.small,
 }
 
-const $characterText: TextStyle = {
-  fontSize: 160,
+const $score: TextStyle = {
+  fontSize: 16,
   fontWeight: "bold",
-  color: colors.text,
-  textAlign: "center",
-  height: 180,
-  lineHeight: 180,
-  includeFontPadding: false,
-  padding: 0,
-  margin: 0,
 }
 
 const $instruction: TextStyle = {
+  fontSize: 18,
+  lineHeight: 24
+}
+
+const $targetChar: TextStyle = {
+  fontSize: 42,
+  fontWeight: "bold",
+  lineHeight: 48,
   textAlign: "center",
-  marginBottom: 20,
+  includeFontPadding: false,
+}
+
+const $remainingText: TextStyle = {
+  fontSize: 14,
+  color: colors.textDim,
+  marginTop: 0
+}
+
+const $characterGrid: ViewStyle = {
+  flexDirection: "row",
+  flexWrap: "wrap",
+  justifyContent: "center",
+  gap: spacing.tiny,
+  backgroundColor: colors.palette.neutral200,
+  padding: spacing.small,
+  borderRadius: 10,
+  marginBottom: spacing.medium,
+  width: "100%",
+}
+
+const $characterButton: ViewStyle = {
+  width: "23%",
+  aspectRatio: 1,
+  backgroundColor: colors.background,
+  borderRadius: 8,
+  justifyContent: "center",
+  alignItems: "center",
+  borderWidth: 1,
+  borderColor: colors.border,
+  padding: spacing.tiny,
+  minHeight: 60,
+}
+
+const $characterText: TextStyle = {
+  fontSize: 32,
+  fontWeight: "bold",
+  color: colors.text,
+  textAlign: "center",
+  includeFontPadding: false,
+  textAlignVertical: "center",
+  lineHeight: 36,
 }
 
 const $button: ViewStyle = {
-  minWidth: 100,  // Reduced width to fit three buttons
-  marginHorizontal: 5,
+  minWidth: 80,
 }
 
-const $scoreSection: ViewStyle = {
-  flexDirection: "row",
-  justifyContent: "space-around",
-  // paddingVertical: spacing.md,
-  marginTop: -40,
-  minHeight: 20,
+const $endButton: ViewStyle = {
+  backgroundColor: colors.palette.angry500,
+  padding: spacing.small,
+  borderRadius: 8,
 }
 
-const $scoreText: TextStyle = {
-  fontSize: 18,
+const $title: TextStyle = {
+  fontSize: 40,
+  fontWeight: "bold",
+  textAlign: "center",
+  marginTop: spacing.extraLarge,
+  marginBottom: spacing.huge,
+  color: colors.text,
+  includeFontPadding: false,
+  lineHeight: 48,
+}
+
+const $startContainer: ViewStyle = {
+  flex: 1,
+  padding: spacing.large,
+}
+
+const $startContent: ViewStyle = {
+  flex: 1,
+  justifyContent: "center",
+  alignItems: "center",
+  paddingBottom: spacing.massive,
+}
+
+const $startButton: ViewStyle = {
+  backgroundColor: "#4CAF50",
+  borderRadius: 16,
+  padding: spacing.large,
+  minHeight: 80,
+  width: "100%",
+  marginTop: spacing.extraLarge * 2,
+  shadowColor: "#000",
+  shadowOffset: { width: 0, height: 4 },
+  shadowOpacity: 0.3,
+  shadowRadius: 4,
+  elevation: 8,
+}
+
+const $correctButton: ViewStyle = {
+  backgroundColor: "#4CAF50",
+}
+
+const $incorrectButton: ViewStyle = {
+  backgroundColor: "#FF5252",
+}
+
+const $selectedCharacterText: TextStyle = {
+  color: colors.text,
   fontWeight: "bold",
 }
 
-const $correctBox: ViewStyle = {
-  borderColor: colors.palette.neutral500,
-  backgroundColor: colors.palette.neutral100,
-}
-
-const $incorrectBox: ViewStyle = {
-  borderColor: colors.palette.neutral100,
-  backgroundColor: colors.palette.neutral100,
-}
-
-const $ttsControls: ViewStyle = {
-  flexDirection: 'row',
-  justifyContent: 'center',
-  alignItems: 'center',
-  marginVertical: spacing.md,
-}
-
-const $playButton: ViewStyle = {
-  minWidth: 150,
-  backgroundColor: colors.palette.neutral100,
-}
-
-const $playingButton: ViewStyle = {
-  backgroundColor: colors.palette.neutral200
-}
-
-const $buttonSection: ViewStyle = {
-  flexDirection: "row",
-  justifyContent: "center",
-  flexWrap: "wrap",
-  gap: spacing.sm,
-  paddingHorizontal: spacing.md,
-  paddingBottom: spacing.md,
-}
-
-const $screenContentContainer: ViewStyle = {
-  flexGrow: 1,
-  minHeight: "100%",
-}
-
-const $listeningBox: ViewStyle = {
-  marginTop: spacing.md,
-  padding: spacing.md,
-  borderRadius: 6,
-  backgroundColor: colors.palette.neutral100,
-  alignItems: "center",
-}
-
-const $errorBox: ViewStyle = {
-  marginTop: spacing.md,
-  padding: spacing.md,
-  borderRadius: 6,
-  backgroundColor: colors.palette.neutral100,
-  alignItems: "center",
-}
-
-const $exitButtonContainer: ViewStyle = {
-  position: 'absolute',
-  top: spacing.md,
-  left: spacing.md,
-  zIndex: 1,
+const $gameProgressBar: ViewStyle = {
+  marginBottom: spacing.medium,
 }
 
 const $exitButton: ViewStyle = {
-  minWidth: 100,
-  backgroundColor: colors.palette.accent300,
-} 
+  backgroundColor: colors.palette.neutral200,
+  paddingVertical: spacing.small,
+  paddingHorizontal: spacing.medium,
+  borderRadius: 8,
+  marginBottom: spacing.medium,
+  borderWidth: 1,
+  borderColor: colors.palette.neutral400,
+  alignSelf: "center",
+  minWidth: 200,
+}
+
+const $exitButtonText: TextStyle = {
+  color: colors.text,
+  fontSize: 16,
+  fontWeight: "500",
+  textAlign: "center",
+}
+
+const $whiteText: TextStyle = {
+  color: colors.palette.neutral100,
+  fontSize: 24,
+  fontWeight: "bold",
+  textAlign: "center",
+  includeFontPadding: false,
+  lineHeight: 32,
+}
+
+const $flashCard: ViewStyle = {
+  backgroundColor: colors.background,
+  borderRadius: 16,
+  padding: spacing.small,
+  shadowColor: colors.text,
+  shadowOffset: { width: 0, height: 2 },
+  shadowOpacity: 0.25,
+  shadowRadius: 4,
+  elevation: 5,
+  alignItems: 'center',
+  gap: spacing.tiny,
+  width: "100%",
+  alignSelf: 'center',
+  marginBottom: spacing.medium,
+  borderWidth: 1,
+  borderColor: colors.border,
+}

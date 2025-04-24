@@ -71,7 +71,7 @@ export const SettingsScreen = () => {
   }
 
   return (
-    <Screen preset="scroll" safeAreaEdges={["top"]} style={$screenContainer}>
+    <Screen preset="scroll" contentContainerStyle={$screenContainer}>
       <Text text="Voice Settings" style={$title} />
       
       {isLoading ? (
@@ -104,14 +104,14 @@ export const SettingsScreen = () => {
 
 const $screenContainer: ViewStyle = {
   flex: 1,
-  padding: spacing.lg,
+  padding: spacing.large,
   backgroundColor: colors.background,
 }
 
 const $title: TextStyle = {
   fontSize: 24,
   fontWeight: "bold",
-  marginBottom: spacing.lg,
+  marginBottom: spacing.large,
   color: colors.text,
 }
 
@@ -127,4 +127,5 @@ const $voiceList: ViewStyle = {
 const $testButton: ViewStyle = {
   minWidth: 80,
   marginLeft: spacing.medium,
+  marginBottom: spacing.medium,
 } 

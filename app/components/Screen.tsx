@@ -14,7 +14,6 @@ import {
 } from "react-native"
 import { $styles } from "../theme"
 import { ExtendedEdge, useSafeAreaInsetsStyle } from "../utils/useSafeAreaInsetsStyle"
-import { KeyboardAwareScrollView } from "react-native-keyboard-controller"
 import { useAppTheme } from "@/utils/useAppTheme"
 
 export const DEFAULT_BOTTOM_OFFSET = 50
@@ -194,6 +193,7 @@ function ScreenWithScrolling(props: ScreenProps) {
     contentContainerStyle,
     ScrollViewProps,
     style,
+    keyboardOffset = 0,
   } = props as ScrollScreenProps
 
   const ref = useRef<ScrollView>(null)
@@ -205,27 +205,34 @@ function ScreenWithScrolling(props: ScreenProps) {
   useScrollToTop(ref)
 
   return (
-    <KeyboardAwareScrollView
-      bottomOffset={keyboardBottomOffset}
-      {...{ keyboardShouldPersistTaps, scrollEnabled, ref }}
-      {...ScrollViewProps}
-      onLayout={(e) => {
-        onLayout(e)
-        ScrollViewProps?.onLayout?.(e)
-      }}
-      onContentSizeChange={(w: number, h: number) => {
-        onContentSizeChange(w, h)
-        ScrollViewProps?.onContentSizeChange?.(w, h)
-      }}
-      style={[$outerStyle, ScrollViewProps?.style, style]}
-      contentContainerStyle={[
-        $innerStyle,
-        ScrollViewProps?.contentContainerStyle,
-        contentContainerStyle,
-      ]}
+    <KeyboardAvoidingView
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      keyboardVerticalOffset={keyboardOffset}
+      style={[$outerStyle, style]}
     >
-      {children}
-    </KeyboardAwareScrollView>
+      <ScrollView
+        ref={ref}
+        keyboardShouldPersistTaps={keyboardShouldPersistTaps}
+        scrollEnabled={scrollEnabled}
+        {...ScrollViewProps}
+        onLayout={(e) => {
+          onLayout(e)
+          ScrollViewProps?.onLayout?.(e)
+        }}
+        onContentSizeChange={(w: number, h: number) => {
+          onContentSizeChange(w, h)
+          ScrollViewProps?.onContentSizeChange?.(w, h)
+        }}
+        style={[$outerStyle, ScrollViewProps?.style, style]}
+        contentContainerStyle={[
+          $innerStyle,
+          ScrollViewProps?.contentContainerStyle,
+          contentContainerStyle,
+        ]}
+      >
+        {children}
+      </ScrollView>
+    </KeyboardAvoidingView>
   )
 }
 
@@ -252,25 +259,22 @@ export function Screen(props: ScreenProps) {
   } = props
 
   const $containerInsets = useSafeAreaInsetsStyle(safeAreaEdges)
+  const { theme } = useAppTheme()
+
+  const $containerStyle: ViewStyle = {
+    flex: 1,
+    height: "100%",
+    backgroundColor: backgroundColor ?? theme.colors.background,
+  }
 
   return (
-    <View
-      style={[
-        $containerStyle,
-        { backgroundColor: backgroundColor || colors.background },
-        $containerInsets,
-      ]}
-    >
-      <StatusBar
-        style={statusBarStyle || (themeContext === "dark" ? "light" : "dark")}
-        {...StatusBarProps}
-      />
-
+    <View style={[$containerStyle, $containerInsets]}>
+      <StatusBar style={statusBarStyle || "dark"} {...StatusBarProps} />
       <KeyboardAvoidingView
-        behavior={isIos ? "padding" : "height"}
+        behavior={isIos ? "padding" : undefined}
         keyboardVerticalOffset={keyboardOffset}
         {...KeyboardAvoidingViewProps}
-        style={[$styles.flex1, KeyboardAvoidingViewProps?.style]}
+        style={[$keyboardAvoidingViewStyle, KeyboardAvoidingViewProps?.style]}
       >
         {isNonScrolling(props.preset) ? (
           <ScreenWithoutScrolling {...props} />
@@ -301,4 +305,10 @@ const $justifyFlexEnd: ViewStyle = {
 const $innerStyle: ViewStyle = {
   justifyContent: "flex-start",
   alignItems: "stretch",
+}
+
+const $keyboardAvoidingViewStyle: ViewStyle = {
+  flex: 1,
+  height: "100%",
+  width: "100%",
 }

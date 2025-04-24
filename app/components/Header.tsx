@@ -14,6 +14,7 @@ import { Icon, IconTypes } from "./Icon"
 import { Text, TextProps } from "./Text"
 import { useAppTheme } from "@/utils/useAppTheme"
 import type { ThemedStyle } from "@/theme"
+import { colors, spacing } from "../theme"
 
 export interface HeaderProps {
   /**
@@ -183,7 +184,7 @@ export function Header(props: HeaderProps) {
 
   return (
     <View style={[$container, $containerInsets, { backgroundColor }, $containerStyleOverride]}>
-      <View style={[$styles.row, $wrapper, $styleOverride]}>
+      <View style={[$wrapper, $styleOverride]}>
         <HeaderAction
           tx={leftTx}
           text={leftText}
@@ -270,13 +271,16 @@ function HeaderAction(props: HeaderActionProps) {
 }
 
 const $wrapper: ViewStyle = {
-  height: 56,
+  height: 44,
+  flexDirection: "row",
   alignItems: "center",
   justifyContent: "space-between",
+  paddingHorizontal: spacing.medium,
 }
 
 const $container: ViewStyle = {
   width: "100%",
+  backgroundColor: colors.background,
 }
 
 const $title: TextStyle = {
@@ -288,7 +292,7 @@ const $actionTextContainer: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   alignItems: "center",
   justifyContent: "center",
   height: "100%",
-  paddingHorizontal: spacing.md,
+  paddingHorizontal: spacing.medium,
   zIndex: 2,
 })
 
@@ -301,7 +305,7 @@ const $actionIconContainer: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   alignItems: "center",
   justifyContent: "center",
   height: "100%",
-  paddingHorizontal: spacing.md,
+  paddingHorizontal: spacing.medium,
   zIndex: 2,
 })
 
@@ -309,15 +313,15 @@ const $actionFillerContainer: ViewStyle = {
   width: 16,
 }
 
-const $titleWrapperCenter: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+const $titleWrapperCenter: ViewStyle = {
   alignItems: "center",
   justifyContent: "center",
   height: "100%",
   width: "100%",
   position: "absolute",
-  paddingHorizontal: spacing.xxl,
+  paddingHorizontal: spacing.extraLarge,
   zIndex: 1,
-})
+}
 
 const $titleWrapperFlex: ViewStyle = {
   justifyContent: "center",

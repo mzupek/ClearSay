@@ -1,137 +1,241 @@
-import { Instance, SnapshotOut, types } from "mobx-state-tree"
-import AsyncStorage from "@react-native-async-storage/async-storage"
+import { Instance, types } from "mobx-state-tree"
+import * as storage from "app/utils/storage"
 
-const STORAGE_KEY = "CLEARSAY_OBJECTS"
-
-export interface PhotoItem {
-  id: string
-  uri: string
-  name: string
-  attempts: number
-  correctAttempts: number
+export const defaultImages = {
+  objects: [
+    {
+      id: "default_1",
+      name: "bed",
+      uri: require("../../assets/images/defaults/bed.png"),
+      category: "furniture",
+      isDefault: true
+    },
+    {
+      id: "default_2",
+      name: "chair",
+      uri: require("../../assets/images/defaults/chair.png"),
+      category: "furniture",
+      isDefault: true
+    },
+    {
+      id: "default_3",
+      name: "purse",
+      uri: require("../../assets/images/defaults/purse.png"),
+      category: "furniture"
+    },
+    {
+      id: "default_4",
+      name: "cup",
+      uri: require("../../assets/images/defaults/cup.png"),
+      category: "kitchen"
+    },
+    {
+      id: "default_5",
+      name: "car",
+      uri: require("../../assets/images/defaults/car.png"),
+      category: "transport"
+    },
+    {
+      id: "default_6",
+      name: "glasses",
+      uri: require("../../assets/images/defaults/glasses.png"),
+      category: "clothing"
+    },
+    {
+      id: "default_7",
+      name: "hat",
+      uri: require("../../assets/images/defaults/hat.png"),
+      category: "clothing"
+    },  
+    {
+      id: "default_8",
+      name: "lamp",
+      uri: require("../../assets/images/defaults/lamp.png"),
+      category: "home"
+    },
+    {
+      id: "default_9",
+      name: "shoe",
+      uri: require("../../assets/images/defaults/shoe.png"),
+      category: "clothing"
+    },
+    {
+      id: "default_10",
+      name: "silverware",
+      uri: require("../../assets/images/defaults/silverware.png"),
+      category: "kitchen"
+    },
+    // ... add other default images here
+  ]
 }
 
-const PhotoItemModel = types.model("PhotoItem", {
-  id: types.identifier,
-  uri: types.string,
-  name: types.string,
-  attempts: types.optional(types.number, 0),
-  correctAttempts: types.optional(types.number, 0),
+const AttemptModel = types.model("Attempt", {
+  timestamp: types.number,
+  correct: types.boolean,
+  setId: types.string,
+  setName: types.string,
 })
 
-export const ObjectStoreModel = types
-  .model("ObjectStore")
+export const ObjectModel = types
+  .model("Object")
   .props({
-    objects: types.array(PhotoItemModel),
-    currentObjectId: types.maybe(types.string),
-    isSessionActive: types.optional(types.boolean, false),
-    currentScore: types.optional(types.number, 0),
-    totalAttempts: types.optional(types.number, 0),
-    lastAttemptCorrect: types.optional(types.maybe(types.boolean), undefined),
+    id: types.identifier,
+    name: types.string,
+    uri: types.frozen(),
+    pronunciation: types.optional(types.string, ""),
+    tags: types.optional(types.array(types.string), []),
+    difficulty: types.optional(
+      types.enumeration(["easy", "medium", "hard"]), 
+      "medium"
+    ),
+    category: types.optional(types.string, ""),
+    notes: types.optional(types.string, ""),
+    dateCreated: types.optional(types.Date, () => new Date()),
+    dateModified: types.optional(types.Date, () => new Date()),
+    metadata: types.optional(
+      types.model({
+        attempts: types.optional(types.number, 0),
+        correctAttempts: types.optional(types.number, 0),
+        lastPracticed: types.maybe(types.Date)
+      }),
+      {}
+    ),
+    isDefault: types.optional(types.boolean, false)
   })
-  .views((self) => ({
-    get currentObject() {
-      return self.currentObjectId 
-        ? self.objects.find(obj => obj.id === self.currentObjectId)
-        : undefined
-    },
-    get accuracy() {
-      if (self.totalAttempts === 0) return 0
-      return Math.round((self.currentScore / self.totalAttempts) * 100)
-    },
-    get remainingObjects() {
-      return self.objects.filter(obj => obj.id !== self.currentObjectId)
+  .views(self => ({
+    get successRate() {
+      return self.metadata.attempts > 0 
+        ? (self.metadata.correctAttempts / self.metadata.attempts) * 100 
+        : 0
     }
   }))
-  .actions((self) => ({
-    setObjects(objects: PhotoItem[]) {
-      self.objects.replace(objects)
+  .actions(self => ({
+    updateMetadata(correct: boolean) {
+      self.metadata.attempts += 1
+      if (correct) self.metadata.correctAttempts += 1
+      self.metadata.lastPracticed = new Date()
+      self.dateModified = new Date()
     },
+    updateDetails(details: {
+      name?: string
+      pronunciation?: string
+      tags?: string[]
+      difficulty?: "easy" | "medium" | "hard"
+      category?: string
+      notes?: string
+    }) {
+      Object.assign(self, {
+        ...details,
+        dateModified: new Date()
+      })
+    }
+  }))
 
-    addObject(object: PhotoItem) {
-      self.objects.push(object)
-      this.saveObjects()
+export const ObjectStore = types
+  .model("ObjectStore")
+  .props({
+    objects: types.array(ObjectModel)
+  })
+  .views(self => ({
+    get objectList() {
+      return self.objects.slice()
+    }
+  }))
+  .actions(self => ({
+    replaceObjects(newObjects: any[]) {
+      self.objects.replace(newObjects)
     },
-
-    removeObject(id: string) {
-      self.objects.replace(self.objects.filter(obj => obj.id !== id))
-      this.saveObjects()
-    },
-
-    reset() {
-      self.objects.clear()
-      self.currentObjectId = undefined
-      self.isSessionActive = false
-      self.currentScore = 0
-      self.totalAttempts = 0
-      self.lastAttemptCorrect = undefined
-    },
-
-    startSession() {
-      if (self.objects.length === 0) return false
-      self.isSessionActive = true
-      self.currentScore = 0
-      self.totalAttempts = 0
-      self.lastAttemptCorrect = undefined
-      this.generateNewObject()
-      return true
-    },
-
-    endSession() {
-      self.isSessionActive = false
-      self.currentObjectId = undefined
-      self.lastAttemptCorrect = undefined
-    },
-
-    generateNewObject() {
-      const remainingObjects = self.remainingObjects
-      if (remainingObjects.length === 0) {
-        // If no more objects, reshuffle by clearing current
-        self.currentObjectId = undefined
-        return this.generateNewObject()
+    addObject(object: { 
+      id: string
+      name: string
+      uri: any
+      pronunciation?: string
+      tags?: string[]
+      difficulty?: "easy" | "medium" | "hard"
+      category?: string
+      notes?: string
+      isDefault?: boolean 
+    }) {
+      const newObject = {
+        ...object,
+        pronunciation: object.pronunciation || "",
+        tags: object.tags || [],
+        difficulty: object.difficulty || "medium",
+        category: object.category || "",
+        notes: object.notes || "",
+        metadata: {
+          attempts: 0,
+          correctAttempts: 0
+        },
+        isDefault: object.isDefault || false,
+        dateCreated: new Date(),
+        dateModified: new Date()
       }
-      
-      const randomIndex = Math.floor(Math.random() * remainingObjects.length)
-      self.currentObjectId = remainingObjects[randomIndex].id
-      self.lastAttemptCorrect = undefined
+      self.objects.push(newObject)
+      this.saveObjects()
     },
-
-    markAttempt(objectId: string, correct: boolean) {
-      const object = self.objects.find(obj => obj.id === objectId)
+    updateObject(
+      id: string,
+      updates: {
+        name?: string
+        pronunciation?: string
+        tags?: string[]
+        difficulty?: "easy" | "medium" | "hard"
+        category?: string
+        notes?: string
+      }
+    ) {
+      const object = self.objects.find(obj => obj.id === id)
       if (object) {
-        object.attempts += 1
-        if (correct) object.correctAttempts += 1
+        object.updateDetails(updates)
+        this.saveObjects()
       }
-      
-      self.totalAttempts += 1
-      if (correct) self.currentScore += 1
-      self.lastAttemptCorrect = correct
-      
-      this.saveObjects()
     },
-
+    removeObject(id: string) {
+      const index = self.objects.findIndex(obj => obj.id === id)
+      if (index !== -1) {
+        self.objects.splice(index, 1)
+        this.saveObjects()
+      }
+    },
+    updateObjectScore(id: string, correct: boolean) {
+      const object = self.objects.find(obj => obj.id === id)
+      if (object) {
+        object.updateMetadata(correct)
+        this.saveObjects()
+      }
+    },
+    async saveObjects() {
+      try {
+        await storage.save("objects", self.objects.toJSON())
+      } catch (error) {
+        console.error('Error saving objects:', error)
+      }
+    },
     async loadObjects() {
       try {
-        const stored = await AsyncStorage.getItem(STORAGE_KEY)
-        if (stored) {
-          const objects = JSON.parse(stored)
-          this.setObjects(objects)
-          console.log('Objects loaded:', objects.length)
+        const savedObjects = await storage.load("objects")
+        if (savedObjects && savedObjects.length > 0) {
+          this.replaceObjects(savedObjects)
+        } else {
+          // Load default images if no saved objects exist
+          defaultImages.objects.forEach(obj => {
+            this.addObject({
+              ...obj,
+              isDefault: true
+            })
+          })
         }
       } catch (error) {
         console.error('Error loading objects:', error)
       }
     },
-
-    async saveObjects() {
-      try {
-        await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(self.objects.toJSON()))
-        console.log('Objects saved:', self.objects.length)
-      } catch (error) {
-        console.error('Error saving objects:', error)
+    startSession() {
+      return {
+        objects: self.objects.slice(),
+        currentIndex: 0
       }
-    },
+    }
   }))
 
-export interface ObjectStore extends Instance<typeof ObjectStoreModel> {}
-export interface ObjectStoreSnapshot extends SnapshotOut<typeof ObjectStoreModel> {} 
+export interface ObjectStore extends Instance<typeof ObjectStore> {}

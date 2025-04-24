@@ -1,116 +1,128 @@
 import React, { useState, useEffect } from "react"
-import { View, ViewStyle, TextStyle, Image, ScrollView, Alert } from "react-native"
+import { View, ViewStyle, TextStyle, Image, ScrollView, Alert, Dimensions, Platform, ActionSheetIOS, ImageStyle } from "react-native"
 import { Screen, Text, Button } from "app/components"
-import { colors, spacing } from "app/theme"
+import { spacing } from "app/theme"
+import { colors } from "app/theme/colors"
 import { observer } from "mobx-react-lite"
 import * as ImagePicker from 'expo-image-picker'
 import { useStores } from "app/models"
-import * as FileSystem from 'expo-file-system'
+import { useNavigation } from "@react-navigation/native"
+
+const isIPad = Platform.OS === 'ios' && Platform.isPad
 
 export const ObjectSettingsScreen = observer(function ObjectSettingsScreen() {
-  const { objectStore } = useStores()
+  const navigation = useNavigation()
+  const { objectStore, objectSetStore } = useStores()
   const [isLoading, setIsLoading] = useState(false)
 
-  const requestPermissions = async () => {
-    try {
-      const cameraPermission = await ImagePicker.requestCameraPermissionsAsync()
-      if (cameraPermission.status !== 'granted') {
-        Alert.alert(
-          'Permission Required',
-          'Camera access is needed to take photos of objects.',
-          [{ text: 'OK' }]
-        )
-        return false
-      }
-      return true
-    } catch (error) {
-      console.error('Error requesting permissions:', error)
-      return false
+  const handleAddImage = async () => {
+    if (objectSetStore.sets.length === 0) {
+      Alert.alert(
+        "No Sets Available",
+        "Please create an object set first before adding images.",
+        [
+          {
+            text: "Create Set",
+            onPress: () => navigation.navigate("ObjectSet")
+          },
+          {
+            text: "Cancel",
+            style: "cancel"
+          }
+        ]
+      )
+      return
     }
+
+    Alert.alert(
+      "Add Image",
+      "Choose how you want to add an image",
+      [
+        {
+          text: "Take Photo",
+          onPress: () => handleTakePhoto()
+        },
+        {
+          text: "Choose from Library",
+          onPress: () => handlePickImage()
+        },
+        {
+          text: "Cancel",
+          style: "cancel"
+        }
+      ]
+    )
   }
 
-  useEffect(() => {
-    const setup = async () => {
-      const hasPermissions = await requestPermissions()
-      if (hasPermissions) {
-        await setupObjectsDirectory()
-        await objectStore.loadObjects()
-      }
-    }
-    setup()
-  }, [])
-
-  const setupObjectsDirectory = async () => {
-    const dirPath = `${FileSystem.documentDirectory}objects`
-    const dirInfo = await FileSystem.getInfoAsync(dirPath)
-    if (!dirInfo.exists) {
-      await FileSystem.makeDirectoryAsync(dirPath, {
-        intermediates: true
-      })
-      console.log('Created objects directory at:', dirPath)
-    }
+  const handleImageCapture = async (uri: string) => {
+    // Show set selection dialog
+    Alert.alert(
+      "Select Set",
+      "Choose which set to add this image to:",
+      [
+        ...objectSetStore.sets.map(set => ({
+          text: set.name,
+          onPress: () => promptForImageName(uri, set.id)
+        })),
+        {
+          text: "Cancel",
+          style: "cancel"
+        }
+      ]
+    )
   }
 
-  const saveImageToFileSystem = async (uri: string): Promise<string> => {
-    try {
-      const fileName = `object_${Date.now()}.jpg`
-      const dirPath = `${FileSystem.documentDirectory}objects`
-      const newPath = `${dirPath}/${fileName}`
-      
-      // Copy image to permanent location
-      await FileSystem.copyAsync({
-        from: uri,
-        to: newPath
-      })
-
-      console.log('Image saved successfully to:', newPath)
-      // Return the full file:// URI for consistent path handling
-      return `file://${newPath}`
-    } catch (error) {
-      console.error('Error saving image:', error)
-      throw error
-    }
+  const promptForImageName = async (uri: string, setId: string) => {
+    Alert.prompt(
+      "Name this object",
+      "Enter the name for this object:",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Save",
+          onPress: async (name?: string) => {
+            if (name) {
+              try {
+                const base64 = await FileSystem.readAsStringAsync(uri, {
+                  encoding: FileSystem.EncodingType.Base64,
+                })
+                const base64Uri = `data:image/jpeg;base64,${base64}`
+                
+                objectSetStore.addObjectToSet(setId, {
+                  id: Date.now().toString(),
+                  uri: base64Uri,
+                  name: name.trim(),
+                })
+              } catch (error) {
+                console.error('Error saving object:', error)
+                Alert.alert('Error', 'Failed to save object. Please try again.')
+              }
+            }
+          }
+        }
+      ],
+      "plain-text"
+    )
   }
 
   const handleTakePhoto = async () => {
     try {
       setIsLoading(true)
+      const permissionResult = await ImagePicker.requestCameraPermissionsAsync()
+      if (permissionResult.status !== 'granted') {
+        Alert.alert('Permission Required', 'Camera access is needed to take photos.')
+        return
+      }
+
       const result = await ImagePicker.launchCameraAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        quality: 0.8,
+        quality: 0.5,
         allowsEditing: true,
         aspect: [1, 1],
       })
 
       if (!result.canceled && result.assets[0]) {
-        const permanentUri = await saveImageToFileSystem(result.assets[0].uri)
-        console.log('Permanent URI:', permanentUri)
-        
-        Alert.prompt(
-          "Name this object",
-          "Enter the name for this object that you want to practice pronouncing:",
-          [
-            {
-              text: "Cancel",
-              style: "cancel"
-            },
-            {
-              text: "Save",
-              onPress: async (name?: string) => {
-                if (name) {
-                  objectStore.addObject({
-                    id: Date.now().toString(),
-                    uri: permanentUri,
-                    name: name.trim(),
-                    attempts: 0,
-                    correctAttempts: 0
-                  })
-                }
-              }
-            }
-          ],
-          "plain-text"
-        )
+        await handleImageCapture(result.assets[0].uri)
       }
     } catch (error) {
       console.error('Error taking photo:', error)
@@ -120,130 +132,255 @@ export const ObjectSettingsScreen = observer(function ObjectSettingsScreen() {
     }
   }
 
-  const handleDeletePhoto = async (id: string) => {
-    Alert.alert(
-      "Delete Object",
-      "Are you sure you want to delete this object?",
-      [
-        { text: "Cancel", style: "cancel" },
-        { 
-          text: "Delete", 
-          style: "destructive",
-          onPress: async () => {
-            const object = objectStore.objects.find(obj => obj.id === id)
-            if (object) {
-              try {
-                // Remove file:// prefix for FileSystem operations
-                const filePath = object.uri.replace('file://', '')
-                const fileInfo = await FileSystem.getInfoAsync(filePath)
-                
-                if (fileInfo.exists) {
-                  await FileSystem.deleteAsync(filePath, { idempotent: true })
-                  console.log('Successfully deleted file at:', filePath)
-                } else {
-                  console.log('File does not exist:', filePath)
-                }
-                
-                objectStore.removeObject(id)
-              } catch (error) {
-                console.error('Error deleting image:', error)
-                Alert.alert('Error', 'Failed to delete object. Please try again.')
-              }
-            }
+  const handlePickImage = async () => {
+    try {
+      setIsLoading(true)
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        quality: 0.5,
+        allowsEditing: true,
+        aspect: [1, 1],
+      })
+
+      if (!result.canceled && result.assets[0]) {
+        await handleImageCapture(result.assets[0].uri)
+      }
+    } catch (error) {
+      console.error('Error picking image:', error)
+      Alert.alert('Error', 'Failed to select image. Please try again.')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleAddToSet = (object: any) => {
+    if (objectSetStore.sets.length === 0) {
+      Alert.alert(
+        "No Sets Available",
+        "Please create an object set first.",
+        [
+          {
+            text: "Create Set",
+            onPress: () => navigation.navigate("ObjectSet")
+          },
+          {
+            text: "Cancel",
+            style: "cancel"
           }
+        ]
+      )
+      return
+    }
+
+    Alert.alert(
+      "Select Set",
+      "Choose which set to add this object to:",
+      [
+        ...objectSetStore.sets.map(set => ({
+          text: set.name,
+          onPress: () => {
+            const newObject = {
+              id: object.id,
+              uri: object.uri,
+              name: object.name,
+              attempts: 0,
+              correctAttempts: 0
+            }
+            objectSetStore.addObjectToSet(set.id, newObject)
+            Alert.alert("Success", "Object added to set successfully!")
+          }
+        })),
+        {
+          text: "Cancel",
+          style: "cancel"
         }
       ]
     )
   }
 
-  return (
-    <Screen preset="scroll" style={$screenContainer}>
-      <Text text="Object List" preset="subheading" style={$title} />
-      
-      <Button
-        text="Take Photo of New Object"
-        onPress={handleTakePhoto}
-        style={$addButton}
-        disabled={isLoading}
-      />
+  const handleImageSelection = async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 1,
+      })
 
-      <ScrollView style={$photoList}>
-        {objectStore.objects.map(photo => {
-          console.log('Rendering photo:', photo.uri)
-          return (
-            <View key={photo.id} style={$photoItem}>
+      if (!result.canceled) {
+        const uri = result.assets[0].uri
+        Alert.prompt(
+          "Name Object",
+          "Enter a name for this object:",
+          [
+            { text: "Cancel", style: "cancel" },
+            {
+              text: "Save",
+              onPress: (name?: string) => {
+                if (name) {
+                  objectStore.addObject({
+                    id: Date.now().toString(),
+                    name: name.trim(),
+                    uri: { uri },
+                    attempts: 0,
+                    correctAttempts: 0
+                  })
+                }
+              }
+            }
+          ]
+        )
+      }
+    } catch (error) {
+      console.error('Error selecting image:', error)
+      Alert.alert('Error', 'Failed to select image')
+    }
+  }
+
+  const handleDeletePhoto = (id: string) => {
+    Alert.alert(
+      "Delete Object",
+      "Are you sure you want to delete this object?",
+      [
+        {
+          text: "Cancel",
+          style: "cancel"
+        },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: () => objectStore.removeObject(id)
+        }
+      ]
+    )
+  }
+
+  useEffect(() => {
+    objectStore.loadObjects()
+  }, [])
+
+  return (
+    <Screen preset="scroll">
+      <View style={$container}>
+        <Text preset="heading" text="Object Settings" style={$title} />
+        <View style={$buttonContainer}>
+          <Button
+            text="Add New Object"
+            onPress={handleImageSelection}
+            style={[$addButton]}
+            textStyle={$whiteText}
+          />
+          <Button
+            text="Manage Object Sets"
+            onPress={() => navigation.navigate("ObjectSet")}
+            style={$manageButton}
+            textStyle={$whiteText}
+          />
+        </View>
+        <ScrollView style={$scrollView}>
+          {objectStore.objectList.map((obj) => (
+            <View key={obj.id} style={$objectContainer}>
               <Image 
-                source={{ uri: photo.uri }}
-                style={$photoImage} 
+                source={obj.isDefault ? obj.uri : { uri: obj.uri.uri }}
+                style={$objectImage}
                 resizeMode="cover"
-                onError={(error) => console.error('Image loading error:', error.nativeEvent.error)}
               />
-              <View style={$photoDetails}>
-                <Text text={photo.name} style={$photoName} />
-                <Button
-                  text="Delete"
-                  onPress={() => handleDeletePhoto(photo.id)}
-                  style={$deleteButton}
-                  preset="default"
-                />
+              <View style={$textContainer}>
+                <Text text={obj.name} style={$objectName} />
               </View>
+              <Button
+                text="Remove"
+                onPress={() => objectStore.removeObject(obj.id)}
+                style={[$removeButton]}
+                textStyle={$whiteText}
+              />
             </View>
-          )
-        })}
-      </ScrollView>
+          ))}
+        </ScrollView>
+      </View>
     </Screen>
   )
 })
 
-const $screenContainer: ViewStyle = {
+const $container: ViewStyle = {
   flex: 1,
-  backgroundColor: colors.background,
-  padding: spacing.md,
+  padding: spacing.medium,
 }
 
 const $title: TextStyle = {
-  marginBottom: spacing.lg,
+  marginBottom: spacing.large,
   textAlign: "center",
 }
 
-const $addButton: ViewStyle = {
-  marginBottom: spacing.md,
+const $buttonContainer: ViewStyle = {
+  flexDirection: "column",
+  gap: spacing.small,
+  marginBottom: spacing.medium,
 }
 
-const $photoList: ViewStyle = {
+const $button: ViewStyle = {
+  marginBottom: spacing.medium,
+  backgroundColor: colors.palette.neutral800,
+}
+
+const $scrollView: ViewStyle = {
   flex: 1,
 }
 
-const $photoItem: ViewStyle = {
-  flexDirection: 'row',
-  alignItems: 'center',
-  padding: spacing.sm,
-  marginBottom: spacing.md,
+const $objectContainer: ViewStyle = {
+  flexDirection: "row",
+  alignItems: "center",
+  padding: spacing.small,
+  marginBottom: spacing.medium,
   backgroundColor: colors.palette.neutral100,
   borderRadius: 8,
 }
 
-const $photoImage: any = {
+const $textContainer: ViewStyle = {
+  flex: 1,
+  marginHorizontal: spacing.medium,
+}
+
+const $objectImage: ImageStyle = {
   width: 60,
   height: 60,
   borderRadius: 4,
-  marginRight: spacing.md,
-  backgroundColor: colors.palette.neutral300,
 }
 
-const $photoDetails: ViewStyle = {
-  flex: 1,
-  flexDirection: 'row',
-  justifyContent: 'space-between',
-  alignItems: 'center',
+const $objectName: TextStyle = {
+  fontSize: 16,
 }
 
-const $photoName: TextStyle = {
-  flex: 1,
-  marginRight: spacing.sm,
-}
-
-const $deleteButton: ViewStyle = {
+const $removeButton: ViewStyle = {
   minWidth: 80,
   backgroundColor: colors.palette.angry500,
+  padding:10
+}
+
+const $addButton: ViewStyle = {
+  backgroundColor: 'darkgreen',
+  minWidth: 100,
+  shadowColor: 'black',
+  shadowOffset: { width: 5, height: 5 },
+  shadowOpacity: 1,
+  shadowRadius: 5,
+  elevation: 5,
+  borderRadius: 8,
+}
+
+const $manageButton: ViewStyle = {
+  backgroundColor: colors.palette.accent500,
+  minWidth: 100,
+  shadowColor: 'black',
+  shadowOffset: { width: 5, height: 5 },
+  shadowOpacity: 1,
+  shadowRadius: 5,
+  elevation: 5,
+  borderRadius: 8,
+}
+
+const $whiteText: TextStyle = {
+  color: 'white',
+  fontSize: 22,
+  lineHeight: 22,
 } 
