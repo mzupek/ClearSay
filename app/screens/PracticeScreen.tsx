@@ -1,36 +1,74 @@
-import React from "react"
+import React, { useEffect } from "react"
 import { View, ViewStyle, TouchableOpacity, Alert, TextStyle, Dimensions } from "react-native"
 import { observer } from "mobx-react-lite"
-import { Screen, Text, Button } from "app/components"
+import { Screen, Text, Button, ProgressBar } from "app/components"
 import { useStores } from "app/models"
 import { colors, spacing } from "app/theme"
 import { useNavigation } from "@react-navigation/native"
-import { useState, useEffect } from "react"
-import { speak } from "app/utils/speech"
+import { ObjectTabParamList } from "app/navigators/ObjectNavigator"
+import { CompositeScreenProps } from "@react-navigation/native"
+import { BottomTabScreenProps } from "@react-navigation/bottom-tabs"
+import { useHeader } from "app/utils/useHeader"
+import * as Speech from "expo-speech"
 
-export const PracticeScreen = observer(function PracticeScreen() {
+interface PracticeScreenProps extends BottomTabScreenProps<ObjectTabParamList, "ObjectPractice"> {}
+
+export const PracticeScreen = observer(function PracticeScreen(_props: PracticeScreenProps) {
   const { practiceStore } = useStores()
   const navigation = useNavigation()
-  const [selectedChars, setSelectedChars] = useState<{ [key: string]: boolean }>({})
-  const [results, setResults] = useState<{ [key: string]: boolean }>({})
 
-  // Speak instructions when round starts
+  useHeader({
+    title: "Visual Scanning",
+    leftIcon: "back",
+    onLeftPress: () => navigation.goBack(),
+  })
+
   useEffect(() => {
     if (practiceStore.isSessionActive) {
-      speak(
-        `Find all of the ${practiceStore.currentCharacter}`, 
-        practiceStore.currentCharacter
-      )
+      Speech.speak(`Find the letter ${practiceStore.currentCharacter}`)
     }
   }, [practiceStore.currentCharacter, practiceStore.isSessionActive])
 
   const handleCharacterPress = (char: string, index: number) => {
-    const key = `${practiceStore.currentRound}-${index}`
-    const isTarget = char === practiceStore.currentCharacter
+    const isCorrect = char === practiceStore.currentCharacter && practiceStore.isTargetPosition(index)
+    practiceStore.markPosition(index, isCorrect)
+
+    if (isCorrect) {
+      practiceStore.removeTargetPosition(index)
+      practiceStore.markCharacterFound(1, 0)
+
+      if (practiceStore.getRemainingTargets() === 0) {
+        if (practiceStore.currentRound === 10) {
+          practiceStore.recordSession()
+          showSessionSummary()
+        } else {
+          practiceStore.nextRound()
+        }
+      }
+    } else {
+      practiceStore.markCharacterFound(0, 1)
+    }
+  }
+
+  const handleEndRound = () => {
+    practiceStore.recordSession()
+    const finalScore = practiceStore.accuracy()
     
-    // Mark as selected and show result
-    setSelectedChars(prev => ({ ...prev, [key]: true }))
-    setResults(prev => ({ ...prev, [key]: isTarget }))
+    // Narrate completion and score
+    Speech.speak(`Character complete! Your final score is ${finalScore} percent.`)
+    
+    Alert.alert(
+      "Character Complete!",
+      `Analysis: ${finalScore}%\n\nReady to try a new character?`,
+      [
+        {
+          text: "Start New Character",
+          onPress: () => {
+            practiceStore.startNewGame()
+          }
+        }
+      ]
+    )
   }
 
   const handleEndSession = () => {
@@ -43,141 +81,133 @@ export const PracticeScreen = observer(function PracticeScreen() {
           text: "End Session", 
           style: "destructive",
           onPress: () => {
-            practiceStore.endSession()
-            navigation.goBack()
+            showSessionSummary()
           }
         }
       ]
     )
   }
 
-  const handleNextRound = () => {
-    // Calculate round score
-    const currentChars = practiceStore.getCurrentRoundCharacters()
-    const foundCount = currentChars.filter((char, index) => {
-      const key = `${practiceStore.currentRound}-${index}`
-      return selectedChars[key] && results[key]
-    }).length
+  const showSessionSummary = () => {
+    const accuracy = practiceStore.accuracy()
+    const totalFound = practiceStore.correctAnswers
+    const totalAttempts = practiceStore.totalAttempts
+    const incorrectAttempts = practiceStore.incorrectAttempts
 
-    const incorrectCount = Object.values(results).filter(result => !result).length
-    
-    practiceStore.markCharacterFound(foundCount, incorrectCount)
-
-    if (practiceStore.currentRound === 10) {
-      practiceStore.recordSession()
-      const finalScore = practiceStore.accuracy()
-      
-      // Narrate completion and score
-      speak(`Character complete! Your final score is ${finalScore} percent.`)
-      
-      Alert.alert(
-        "Character Complete!",
-        `Analysis: ${finalScore}%\n\nReady to try a new character?`,
-        [
-          {
-            text: "Start New Character",
-            onPress: () => {
-              practiceStore.startNewGame()
-              setSelectedChars({})
-              setResults({})
-            }
+    Alert.alert(
+      "Session Complete! 🎉",
+      `Excellent work!\n\n` +
+      `Final Accuracy: ${accuracy}%\n` +
+      `Characters Found: ${totalFound}\n` +
+      `Total Attempts: ${totalAttempts}\n` +
+      `Incorrect Attempts: ${incorrectAttempts}\n\n` +
+      `Would you like to start a new session?`,
+      [
+        {
+          text: "New Session",
+          style: "default",
+          onPress: () => {
+            practiceStore.endSession()
+            practiceStore.startNewGame()
           }
-        ]
-      )
-    } else {
-      practiceStore.nextRound()
-      setSelectedChars({})
-      setResults({})
-    }
+        },
+        {
+          text: "Exit to Welcome",
+          style: "cancel",
+          onPress: () => {
+            practiceStore.endSession()
+            navigation.goBack()
+          }
+        }
+      ],
+      { cancelable: false }
+    )
+  }
+
+  const renderCharacterButton = (char: string, index: number) => {
+    const isSelected = practiceStore.isPositionSelected(index)
+    const wasCorrect = practiceStore.wasSelectionCorrect(index)
+
+    return (
+      <TouchableOpacity
+        key={index}
+        style={[
+          $characterButton,
+          isSelected && (wasCorrect ? $correctButton : $incorrectButton)
+        ]}
+        onPress={() => handleCharacterPress(char, index)}
+        disabled={isSelected}
+      >
+        <Text
+          style={[
+            $characterText,
+            isSelected && $selectedCharacterText
+          ]}
+        >
+          {char}
+        </Text>
+      </TouchableOpacity>
+    )
   }
 
   if (!practiceStore.isSessionActive) {
     return (
-      <Screen preset="scroll" contentContainerStyle={$container}>
-        <Text text="Find the Character Activity" style={$title} />
-        <Button
-          text="Start Practice ➡️"
-          onPress={() => practiceStore.startNewGame()}
-          style={$startButton}
-          textStyle={$whiteText}
-        />
-         <Button
-          text="⬅️ Exit Practice"
-          onPress={() => navigation.goBack()}
-          style={$exitButton}
-          textStyle={$whiteText}
-        />
+      <Screen preset="scroll" contentContainerStyle={$startContainer}>
+        <Text text="Visual Scanning" style={$title} />
+        
+        <View style={$startContent}>
+          <ProgressBar
+            current={practiceStore.currentRound}
+            total={10}
+            message={practiceStore.currentRound === 1 
+              ? "Complete 10 rounds to finish the session" 
+              : `Round ${practiceStore.currentRound} of 10`}
+          />
+
+          <Button
+            text="Start Practice ➡️"
+            onPress={() => practiceStore.startNewGame()}
+            style={$startButton}
+            textStyle={$whiteText}
+          />
+        </View>
       </Screen>
     )
   }
 
   return (
     <Screen preset="scroll" contentContainerStyle={$container}>
-      <View style={$header}>
-        <Text text={`Round: ${practiceStore.currentRound}/10`} style={$score} />
-        <Text text={`Accuracy: ${practiceStore.accuracy()}%`} style={$score} />
-        <Button
-          text="⬅️ Exit"
-          onPress={handleEndSession}
-          style={[$button, $endButton]}
-          textStyle={$whiteText}
-        />
-      </View>
-
-      <View style={$progressContainer}>
-        <View style={$progressBar}>
-          <View 
-            style={[
-              $progressFill, 
-              { width: `${(practiceStore.currentRound / 10) * 100}%` }
-            ]} 
-          />
+      <View style={$mainContent}>
+        <View style={$header}>
+          <Text text={`Round: ${practiceStore.currentRound}/10`} style={$score} />
+          <Text text={`Accuracy: ${practiceStore.accuracy()}%`} style={$score} />
         </View>
-        <Text 
-          text={`Progress: ${practiceStore.currentRound}/10`} 
-          style={$progressText}
+
+        <ProgressBar
+          current={practiceStore.currentRound}
+          total={10}
+          showNumbers={true}
+          style={$gameProgressBar}
         />
-      </View>
 
-      <View style={$flashCard}>
-        <Text text="Find all:" style={$instruction} />
-        <Text text={practiceStore.currentCharacter} style={$targetChar} />
-      </View>
+        <View style={$flashCard}>
+          <Text text="Find all:" style={$instruction} />
+          <Text text={practiceStore.currentCharacter} style={$targetChar} />
+          <Text text={`Remaining: ${practiceStore.getRemainingTargets()}`} style={$remainingText} />
+        </View>
 
-      <View style={$characterGrid}>
-        {practiceStore.getCurrentRoundCharacters().map((char, index) => {
-          const key = `${practiceStore.currentRound}-${index}`
-          const isSelected = selectedChars[key]
-          const isCorrect = results[key]
-          
-          return (
-            <TouchableOpacity
-              key={index}
-              style={[
-                $characterButton,
-                isSelected && (isCorrect ? $correctButton : $incorrectButton)
-              ]}
-              onPress={() => handleCharacterPress(char, index)}
-              disabled={isSelected}
-            >
-              <Text 
-                text={char} 
-                style={[
-                  $characterText,
-                  isSelected && $selectedCharacterText
-                ]} 
-              />
-            </TouchableOpacity>
-          )
-        })}
+        <View style={$characterGrid}>
+          {practiceStore.getCurrentRoundCharacters().map((char, index) =>
+            renderCharacterButton(char, index),
+          )}
+        </View>
       </View>
 
       <Button
-        text="Next Round ➡️"
-        onPress={handleNextRound}
-        style={[$startButton]}
-        textStyle={$whiteText}
-        disabled={Object.keys(selectedChars).length === 0}
+        text="End Session"
+        onPress={handleEndSession}
+        style={$exitButton}
+        textStyle={$exitButtonText}
       />
     </Screen>
   )
@@ -185,179 +215,186 @@ export const PracticeScreen = observer(function PracticeScreen() {
 
 const $container: ViewStyle = {
   flex: 1,
-  padding: spacing.medium,
+  padding: spacing.small,
+}
+
+const $mainContent: ViewStyle = {
+  flex: 1,
+  alignItems: "center",
 }
 
 const $header: ViewStyle = {
   flexDirection: "row",
   justifyContent: "space-between",
-  alignItems: "center",
-  marginBottom: spacing.large,
+  width: "100%",
+  marginBottom: spacing.small,
 }
 
 const $score: TextStyle = {
-  fontSize: 18,
+  fontSize: 16,
   fontWeight: "bold",
-}
-
-const $targetContainer: ViewStyle = {
-  alignItems: "center",
-  minWidth: 300,
-  alignSelf: 'center',
-  marginBottom: spacing.huge,
-  marginTop: spacing.large,
-  backgroundColor: 'yellow',
-  padding: spacing.large,
-  borderRadius: 10,
-  borderColor: 'black',
-  borderWidth: 4,
 }
 
 const $instruction: TextStyle = {
-  fontSize: 20,
-  lineHeight: 40
+  fontSize: 18,
+  lineHeight: 24
 }
 
 const $targetChar: TextStyle = {
-  fontSize: 48,
+  fontSize: 42,
   fontWeight: "bold",
-  marginTop: spacing.medium,
-  lineHeight: 50
+  lineHeight: 48,
+  textAlign: "center",
+  includeFontPadding: false,
+}
+
+const $remainingText: TextStyle = {
+  fontSize: 14,
+  color: colors.textDim,
+  marginTop: 0
 }
 
 const $characterGrid: ViewStyle = {
   flexDirection: "row",
   flexWrap: "wrap",
   justifyContent: "center",
-  gap: spacing.small,
-  backgroundColor: 'blue',
-  padding: spacing.large,
+  gap: spacing.tiny,
+  backgroundColor: colors.palette.neutral200,
+  padding: spacing.small,
   borderRadius: 10,
-  borderColor: 'black',
-  borderWidth: 4,
-  marginBottom: spacing.large,
-  width: Dimensions.get('window').width < 768 ? "100%" : "auto",
+  marginBottom: spacing.medium,
+  width: "100%",
 }
 
 const $characterButton: ViewStyle = {
-  width: Dimensions.get('window').width < 768 ? "22%" : 60,
+  width: "23%",
   aspectRatio: 1,
-  backgroundColor: colors.palette.neutral200,
+  backgroundColor: colors.background,
   borderRadius: 8,
   justifyContent: "center",
   alignItems: "center",
-  // margin: "1%",
+  borderWidth: 1,
+  borderColor: colors.border,
+  padding: spacing.tiny,
+  minHeight: 60,
 }
 
 const $characterText: TextStyle = {
   fontSize: 32,
   fontWeight: "bold",
-  lineHeight: 60
+  color: colors.text,
+  textAlign: "center",
+  includeFontPadding: false,
+  textAlignVertical: "center",
+  lineHeight: 36,
 }
 
 const $button: ViewStyle = {
-  minWidth: 100,
+  minWidth: 80,
 }
 
 const $endButton: ViewStyle = {
   backgroundColor: colors.palette.angry500,
-  padding: spacing.medium,
-  borderRadius: 10,
+  padding: spacing.small,
+  borderRadius: 8,
 }
 
 const $title: TextStyle = {
-  fontSize: 24,
+  fontSize: 40,
   fontWeight: "bold",
   textAlign: "center",
+  marginTop: spacing.extraLarge,
   marginBottom: spacing.huge,
+  color: colors.text,
+  includeFontPadding: false,
+  lineHeight: 48,
+}
+
+const $startContainer: ViewStyle = {
+  flex: 1,
+  padding: spacing.large,
+}
+
+const $startContent: ViewStyle = {
+  flex: 1,
+  justifyContent: "center",
+  alignItems: "center",
+  paddingBottom: spacing.massive,
 }
 
 const $startButton: ViewStyle = {
-  backgroundColor: 'green',
-  borderRadius: 10,
-  padding: 10,
+  backgroundColor: "#4CAF50",
+  borderRadius: 16,
+  padding: spacing.large,
   minHeight: 80,
-  shadowColor: 'black',
-  shadowOffset: { width: 5, height: 5 },
-  shadowOpacity: 1,
-  shadowRadius: 5,
-  elevation: 5,
-}
-
-const $exitButton: ViewStyle = {
-  backgroundColor: 'red',
-  borderRadius: 10,
-  padding: 10,
-  minHeight: 80,
-  shadowColor: 'black',
-  shadowOffset: { width: 5, height: 5 },
-  shadowOpacity: 1,
-  shadowRadius: 5,
-  elevation: 5,
-  marginTop: spacing.large,
+  width: "100%",
+  marginTop: spacing.extraLarge * 2,
+  shadowColor: "#000",
+  shadowOffset: { width: 0, height: 4 },
+  shadowOpacity: 0.3,
+  shadowRadius: 4,
+  elevation: 8,
 }
 
 const $correctButton: ViewStyle = {
-  backgroundColor: 'green',
+  backgroundColor: "#4CAF50",
 }
 
 const $incorrectButton: ViewStyle = {
-  backgroundColor: colors.palette.angry500,
+  backgroundColor: "#FF5252",
 }
 
 const $selectedCharacterText: TextStyle = {
-  color: colors.palette.neutral100,
+  color: colors.text,
+  fontWeight: "bold",
 }
 
-const $nextButton: ViewStyle = {
-  marginTop: spacing.large,
-  backgroundColor: colors.palette.secondary500,
+const $gameProgressBar: ViewStyle = {
+  marginBottom: spacing.medium,
 }
 
-const $progressContainer: ViewStyle = {
-  marginBottom: spacing.extraLarge,
-  alignItems: "center",
+const $exitButton: ViewStyle = {
+  backgroundColor: colors.palette.neutral200,
+  paddingVertical: spacing.small,
+  paddingHorizontal: spacing.medium,
+  borderRadius: 8,
+  marginBottom: spacing.medium,
+  borderWidth: 1,
+  borderColor: colors.palette.neutral400,
+  alignSelf: "center",
+  minWidth: 200,
 }
 
-const $progressBar: ViewStyle = {
-  width: "100%",
-  height: 10,
-  backgroundColor: colors.palette.neutral300,
-  borderRadius: 5,
-  overflow: "hidden",
-  marginBottom: spacing.extraSmall,
-}
-
-const $progressFill: ViewStyle = {
-  height: "100%",
-  backgroundColor: colors.palette.primary500,
-  borderRadius: 5,
-}
-
-const $progressText: TextStyle = {
-  fontSize: 14,
-  color: colors.textDim,
+const $exitButtonText: TextStyle = {
+  color: colors.text,
+  fontSize: 16,
+  fontWeight: "500",
+  textAlign: "center",
 }
 
 const $whiteText: TextStyle = {
   color: colors.palette.neutral100,
-  fontSize: 25,
-  lineHeight: 30,
+  fontSize: 24,
   fontWeight: "bold",
+  textAlign: "center",
+  includeFontPadding: false,
+  lineHeight: 32,
 }
 
 const $flashCard: ViewStyle = {
-  backgroundColor: 'white',
+  backgroundColor: colors.background,
   borderRadius: 16,
-  padding: spacing.medium,
-  shadowColor: 'black',
+  padding: spacing.small,
+  shadowColor: colors.text,
   shadowOffset: { width: 0, height: 2 },
   shadowOpacity: 0.25,
   shadowRadius: 4,
   elevation: 5,
   alignItems: 'center',
-  gap: spacing.medium,
-  width: 300,
+  gap: spacing.tiny,
+  width: "100%",
   alignSelf: 'center',
-  marginBottom: spacing.large,
+  marginBottom: spacing.medium,
+  borderWidth: 1,
+  borderColor: colors.border,
 }

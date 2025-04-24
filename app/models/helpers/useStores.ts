@@ -1,26 +1,21 @@
 import { createContext, useContext } from "react"
 import { Instance } from "mobx-state-tree"
-import { RootStore } from "../RootStore"
+import { RootStoreModel } from "../RootStore"
 
 /**
  * The RootStoreContext provides a way to access
  * the RootStore in any screen or component.
  */
-const rootStore = RootStore.create({
-  objectStore: { objects: [] },
-  objectSetStore: { sets: [] },
-  practiceStore: {
-    isSessionActive: false,
-    currentRound: 1,
-    currentCharacter: "",
-    characterPool: [],
-    charactersFound: 0,
-    totalTargetCharacters: 0,
-    sessionHistory: []
-  }
+const rootStore = RootStoreModel.create({
+  objects: [],
+  objectSets: [],
+  currentObjectSet: null,
+  currentObject: null,
+  navigationRef: undefined,
+  currentUser: undefined
 })
 
-const RootStoreContext = createContext<Instance<typeof RootStore>>(rootStore)
+const RootStoreContext = createContext<Instance<typeof RootStoreModel>>(rootStore)
 
 /**
  * You can use this Provider to specify a *different* RootStore
@@ -40,28 +35,21 @@ export const RootStoreProvider = RootStoreContext.Provider
  *
  * const { someStore, someOtherStore } = useStores()
  */
-export const useStores = () => {
-  return rootStore // Return the store instance directly
-}
+export const useStores = () => useContext(RootStoreContext)
 
-// Export the store instance
-export const store = rootStore
-
+/**
+ * Used for testing and hot reloading
+ * @returns {Instance<typeof RootStoreModel>}
+ */
 export const setupRootStore = () => {
-  const rootStore = RootStore.create({
-    objectStore: { objects: [] },
-    objectSetStore: { sets: [] },
-    practiceStore: {
-      isSessionActive: false,
-      currentRound: 1,
-      currentCharacter: "",
-      characterPool: [],
-      charactersFound: 0,
-      totalTargetCharacters: 0,
-      sessionHistory: []
-    }
+  return RootStoreModel.create({
+    objects: [],
+    objectSets: [],
+    currentObjectSet: null,
+    currentObject: null,
+    navigationRef: undefined,
+    currentUser: undefined
   })
-  return rootStore
 }
 
 export const useInitialRootStore = () => {

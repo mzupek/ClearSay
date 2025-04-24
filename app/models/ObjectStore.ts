@@ -76,26 +76,57 @@ const AttemptModel = types.model("Attempt", {
   setName: types.string,
 })
 
-const ObjectModel = types
-  .model("ObjectModel", {
+export const ObjectModel = types
+  .model("Object")
+  .props({
     id: types.identifier,
     name: types.string,
     uri: types.frozen(),
-    attempts: types.optional(types.number, 0),
-    correctAttempts: types.optional(types.number, 0),
+    pronunciation: types.optional(types.string, ""),
+    tags: types.optional(types.array(types.string), []),
+    difficulty: types.optional(
+      types.enumeration(["easy", "medium", "hard"]), 
+      "medium"
+    ),
     category: types.optional(types.string, ""),
-    isDefault: types.optional(types.boolean, false),
-    attemptHistory: types.optional(types.array(AttemptModel), [])
+    notes: types.optional(types.string, ""),
+    dateCreated: types.optional(types.Date, () => new Date()),
+    dateModified: types.optional(types.Date, () => new Date()),
+    metadata: types.optional(
+      types.model({
+        attempts: types.optional(types.number, 0),
+        correctAttempts: types.optional(types.number, 0),
+        lastPracticed: types.maybe(types.Date)
+      }),
+      {}
+    ),
+    isDefault: types.optional(types.boolean, false)
   })
+  .views(self => ({
+    get successRate() {
+      return self.metadata.attempts > 0 
+        ? (self.metadata.correctAttempts / self.metadata.attempts) * 100 
+        : 0
+    }
+  }))
   .actions(self => ({
-    addAttempt(correct: boolean, setId: string, setName: string) {
-      self.attempts += 1
-      if (correct) self.correctAttempts += 1
-      self.attemptHistory.push({
-        timestamp: Date.now(),
-        correct,
-        setId,
-        setName,
+    updateMetadata(correct: boolean) {
+      self.metadata.attempts += 1
+      if (correct) self.metadata.correctAttempts += 1
+      self.metadata.lastPracticed = new Date()
+      self.dateModified = new Date()
+    },
+    updateDetails(details: {
+      name?: string
+      pronunciation?: string
+      tags?: string[]
+      difficulty?: "easy" | "medium" | "hard"
+      category?: string
+      notes?: string
+    }) {
+      Object.assign(self, {
+        ...details,
+        dateModified: new Date()
       })
     }
   }))
@@ -107,21 +138,58 @@ export const ObjectStore = types
   })
   .views(self => ({
     get objectList() {
-      console.log("Current objects:", JSON.stringify(self.objects, null, 2))
       return self.objects.slice()
     }
   }))
   .actions(self => ({
-    addObject(object: { id: string; name: string; uri: any; attempts?: number; correctAttempts?: number; category?: string; isDefault?: boolean }) {
+    replaceObjects(newObjects: any[]) {
+      self.objects.replace(newObjects)
+    },
+    addObject(object: { 
+      id: string
+      name: string
+      uri: any
+      pronunciation?: string
+      tags?: string[]
+      difficulty?: "easy" | "medium" | "hard"
+      category?: string
+      notes?: string
+      isDefault?: boolean 
+    }) {
       const newObject = {
         ...object,
-        attempts: object.attempts || 0,
-        correctAttempts: object.correctAttempts || 0,
+        pronunciation: object.pronunciation || "",
+        tags: object.tags || [],
+        difficulty: object.difficulty || "medium",
         category: object.category || "",
-        isDefault: object.isDefault || false
+        notes: object.notes || "",
+        metadata: {
+          attempts: 0,
+          correctAttempts: 0
+        },
+        isDefault: object.isDefault || false,
+        dateCreated: new Date(),
+        dateModified: new Date()
       }
       self.objects.push(newObject)
       this.saveObjects()
+    },
+    updateObject(
+      id: string,
+      updates: {
+        name?: string
+        pronunciation?: string
+        tags?: string[]
+        difficulty?: "easy" | "medium" | "hard"
+        category?: string
+        notes?: string
+      }
+    ) {
+      const object = self.objects.find(obj => obj.id === id)
+      if (object) {
+        object.updateDetails(updates)
+        this.saveObjects()
+      }
     },
     removeObject(id: string) {
       const index = self.objects.findIndex(obj => obj.id === id)
@@ -130,28 +198,28 @@ export const ObjectStore = types
         this.saveObjects()
       }
     },
+    updateObjectScore(id: string, correct: boolean) {
+      const object = self.objects.find(obj => obj.id === id)
+      if (object) {
+        object.updateMetadata(correct)
+        this.saveObjects()
+      }
+    },
     async saveObjects() {
       try {
-        console.log('Saving objects:', self.objects.slice())
-        await storage.save("objects", self.objects.slice())
+        await storage.save("objects", self.objects.toJSON())
       } catch (error) {
         console.error('Error saving objects:', error)
       }
     },
-    replaceObjects(newObjects: Array<any>) {
-      self.objects.replace(newObjects)
-    },
     async loadObjects() {
       try {
         const savedObjects = await storage.load("objects")
-        console.log('Loaded objects:', savedObjects)
         if (savedObjects && savedObjects.length > 0) {
-          self.replaceObjects(savedObjects)
+          this.replaceObjects(savedObjects)
         } else {
-          console.log('Loading default images')
           // Load default images if no saved objects exist
           defaultImages.objects.forEach(obj => {
-            console.log('Adding default object:', obj)
             this.addObject({
               ...obj,
               isDefault: true
@@ -166,13 +234,6 @@ export const ObjectStore = types
       return {
         objects: self.objects.slice(),
         currentIndex: 0
-      }
-    },
-    updateObjectScore(id: string, correct: boolean, setId: string, setName: string) {
-      const object = self.objects.find(obj => obj.id === id)
-      if (object) {
-        object.addAttempt(correct, setId, setName)
-        this.saveObjects()
       }
     }
   }))

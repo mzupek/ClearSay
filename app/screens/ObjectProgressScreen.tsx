@@ -5,29 +5,57 @@ import { colors, spacing } from "app/theme"
 import { observer } from "mobx-react-lite"
 import { useStores } from "app/models"
 import { format, subDays, startOfToday, endOfToday } from "date-fns"
+import { ObjectModel, ObjectSetModel } from "app/models"
+import { Instance } from "mobx-state-tree"
+
+type ObjectType = Instance<typeof ObjectModel>
+type ObjectSetType = Instance<typeof ObjectSetModel>
+
+interface ObjectMetadata {
+  attempts: number
+  correctAttempts: number
+  lastPracticed: Date | null
+}
+
+interface Attempt {
+  timestamp: number
+  correct: boolean
+  setId: string
+  objectName?: string
+}
+
+interface AttemptWithObject extends Attempt {
+  objectName: string
+}
 
 export const ObjectProgressScreen = observer(function ObjectProgressScreen() {
-  const { objectStore, objectSetStore } = useStores()
+  const store = useStores()
   const [selectedPeriod, setSelectedPeriod] = useState(7) // Default to 7 days
   const [selectedSetId, setSelectedSetId] = useState<string | null>(null)
 
-  const getFilteredAttempts = (days: number, setId?: string | null) => {
+  const getFilteredAttempts = (days: number, setId?: string | null): AttemptWithObject[] => {
     const cutoffDate = subDays(new Date(), days).getTime()
-    const allAttempts = objectStore.objects.flatMap(obj => 
-      obj.attemptHistory.map(attempt => ({
-        ...attempt,
-        objectName: obj.name,
-      }))
-    ).filter(attempt => attempt.timestamp >= cutoffDate)
+    const allAttempts = store.objects.flatMap((obj: ObjectType) => {
+      const metadata = (obj as any).metadata as ObjectMetadata || { attempts: 0, correctAttempts: 0, lastPracticed: null }
+      if (!metadata.lastPracticed || metadata.lastPracticed.getTime() < cutoffDate) {
+        return []
+      }
+      return [{
+        timestamp: metadata.lastPracticed.getTime(),
+        correct: metadata.correctAttempts > 0,
+        setId: setId || "all",
+        objectName: obj.name
+      }]
+    }).filter((attempt: AttemptWithObject) => attempt.timestamp >= cutoffDate)
 
     return setId 
-      ? allAttempts.filter(attempt => attempt.setId === setId)
+      ? allAttempts.filter((attempt: AttemptWithObject) => attempt.setId === setId)
       : allAttempts
   }
 
-  const calculateStats = (attempts: any[]) => {
+  const calculateStats = (attempts: AttemptWithObject[]) => {
     const totalAttempts = attempts.length
-    const totalCorrect = attempts.filter(a => a.correct).length
+    const totalCorrect = attempts.filter((a: AttemptWithObject) => a.correct).length
 
     return {
       attempts: totalAttempts,
@@ -40,15 +68,21 @@ export const ObjectProgressScreen = observer(function ObjectProgressScreen() {
     const today = startOfToday().getTime()
     const todayEnd = endOfToday().getTime()
     
-    const todayAttempts = objectStore.objects.flatMap(obj => 
-      obj.attemptHistory.filter(attempt => 
-        attempt.timestamp >= today && attempt.timestamp <= todayEnd
-      )
-    )
+    const todayAttempts = store.objects.flatMap((obj: ObjectType) => {
+      const metadata = (obj as any).metadata as ObjectMetadata || { attempts: 0, correctAttempts: 0, lastPracticed: null }
+      if (!metadata.lastPracticed || metadata.lastPracticed.getTime() < today || metadata.lastPracticed.getTime() > todayEnd) {
+        return []
+      }
+      return [{
+        timestamp: metadata.lastPracticed.getTime(),
+        correct: metadata.correctAttempts > 0,
+        setId: "all"
+      }]
+    })
 
     return {
       attempts: todayAttempts.length,
-      correct: todayAttempts.filter(a => a.correct).length
+      correct: todayAttempts.filter((a: Attempt) => a.correct).length
     }
   }
 
@@ -59,7 +93,7 @@ export const ObjectProgressScreen = observer(function ObjectProgressScreen() {
   return (
     <Screen preset="scroll" contentContainerStyle={$screenContainer}>
       <View style={$mainContainer}>
-        <Text text="Object Progress" preset="heading" style={$title} />
+        <Text text="Progress" preset="heading" style={$title} />
         
         <View style={$filterContainer}>
           {[7, 14, 30].map(days => (
@@ -79,7 +113,7 @@ export const ObjectProgressScreen = observer(function ObjectProgressScreen() {
         <View style={$metricsContainer}>
           <Card
             style={$metricCard}
-            content={
+            ContentComponent={
               <View style={$metricContent}>
                 <Text text="Today" style={$metricTitle} />
                 <Text text={`${dailyStats.attempts}`} style={$metricValue} />
@@ -94,7 +128,7 @@ export const ObjectProgressScreen = observer(function ObjectProgressScreen() {
 
           <Card
             style={$metricCard}
-            content={
+            ContentComponent={
               <View style={$metricContent}>
                 <Text text={`Last ${selectedPeriod} Days`} style={$metricTitle} />
                 <Text text={`${periodStats.attempts}`} style={$metricValue} />
@@ -110,14 +144,14 @@ export const ObjectProgressScreen = observer(function ObjectProgressScreen() {
 
         <Text text="Sets Progress" style={$sectionTitle} />
         <ScrollView style={$setsContainer}>
-          {objectSetStore.setList.map(set => {
+          {store.objectSets.map((set: ObjectSetType) => {
             const setAttempts = getFilteredAttempts(selectedPeriod, set.id)
             const setStats = calculateStats(setAttempts)
             return (
               <Card
                 key={set.id}
                 style={$setCard}
-                content={
+                ContentComponent={
                   <View style={$setContent}>
                     <Text text={set.name} style={$setTitle} />
                     <View style={$setStats}>
@@ -156,6 +190,9 @@ const $mainContainer: ViewStyle = {
 }
 
 const $title: TextStyle = {
+  fontSize: 24,
+  fontWeight: "bold",
+  color: colors.text,
   marginBottom: spacing.large,
   textAlign: "center",
 }
@@ -292,12 +329,12 @@ const $resultMark: TextStyle = {
   textAlign: "center",
 }
 
-const $correctMark: TextStyle = {
-  color: colors.palette.success400,
+const $incorrectMark: TextStyle = {
+  color: colors.palette.angry500,
 }
 
-const $incorrectMark: TextStyle = {
-  color: colors.palette.angry400,
+const $correctMark: TextStyle = {
+  color: colors.palette.secondary500,
 }
 
 const $metricsContainer: ViewStyle = {

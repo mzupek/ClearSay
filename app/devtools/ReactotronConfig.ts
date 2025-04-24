@@ -7,7 +7,6 @@ import { Platform, NativeModules } from "react-native"
 
 import { ArgType } from "reactotron-core-client"
 import { mst } from "reactotron-mst"
-import mmkvPlugin from "reactotron-react-native-mmkv"
 
 import { storage, clear } from "@/utils/storage"
 import { goBack, resetRoot, navigate } from "@/navigators/navigationUtilities"
@@ -30,14 +29,13 @@ reactotron.use(
   }),
 )
 
-reactotron.use(mmkvPlugin<ReactotronReactNative>({ storage }))
+// Let's clear Reactotron on every time we load the app
+clear()
 
-if (Platform.OS !== "web") {
-  reactotron.useReactNative({
-    networking: {
-      ignoreUrls: /symbolicate/,
-    },
-  })
+// Totally hacky, but this allows you to not both importing reactotron-react-native
+// on every file.  This is just DEV mode, so no big deal.
+if (__DEV__) {
+  console.tron = Reactotron
 }
 
 /**
@@ -106,25 +104,6 @@ reactotron.onCustomCommand({
     goBack()
   },
 })
-
-/**
- * We're going to add `console.tron` to the Reactotron object.
- * Now, anywhere in our app in development, we can use Reactotron like so:
- *
- * ```
- * if (__DEV__) {
- *  console.tron.display({
- *    name: 'JOKE',
- *    preview: 'What's the best thing about Switzerland?',
- *    value: 'I don't know, but the flag is a big plus!',
- *    important: true
- *  })
- * }
- * ```
- *
- * Use this power responsibly! :)
- */
-console.tron = reactotron
 
 /**
  * We tell typescript about our dark magic

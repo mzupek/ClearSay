@@ -29,7 +29,6 @@ import { ErrorBoundary } from "./screens/ErrorScreen/ErrorBoundary"
 import * as storage from "./utils/storage"
 import { customFontsToLoad } from "./theme"
 import Config from "./config"
-import { KeyboardProvider } from "react-native-keyboard-controller"
 import { loadDateFnsLocale } from "./utils/formatDate"
 import { Platform } from 'react-native'
 import * as Speech from 'expo-speech'
@@ -42,25 +41,18 @@ import { useColorScheme } from "react-native"
 import { GestureHandlerRootView } from "react-native-gesture-handler"
 import { ViewStyle } from "react-native"
 import * as SplashScreen from "expo-splash-screen"
-import { RootStore, RootStoreProvider } from "./models"
+import { RootStoreModel, RootStoreProvider } from "./models"
 
 export const NAVIGATION_PERSISTENCE_KEY = "NAVIGATION_STATE"
 
 // Keep the splash screen visible while we fetch resources
 SplashScreen.preventAutoHideAsync()
 
-const rootStore = RootStore.create({
-  objectStore: { objects: [] },
-  objectSetStore: { sets: [] },
-  practiceStore: {
-    isSessionActive: false,
-    currentRound: 1,
-    currentCharacter: "",
-    characterPool: [],
-    charactersFound: 0,
-    totalTargetCharacters: 0,
-    sessionHistory: []
-  }
+const rootStore = RootStoreModel.create({
+  objects: [],
+  objectSets: [],
+  currentObjectSet: null,
+  currentObject: null
 })
 
 // Web linking configuration
@@ -96,7 +88,7 @@ interface AppProps {
  * @param {AppProps} props - The props for the `App` component.
  * @returns {JSX.Element} The rendered `App` component.
  */
-export function App() {
+export function App({ hideSplashScreen }: AppProps) {
   const {
     initialNavigationState,
     onNavigationStateChange,
@@ -106,24 +98,28 @@ export function App() {
   useEffect(() => {
     async function prepare() {
       try {
-        await rootStore.objectStore.loadObjects()
+        // Remove loadObjects call since we haven't implemented it yet
       } catch (e) {
         console.warn(e)
       } finally {
-        await SplashScreen.hideAsync()
+        if (hideSplashScreen) {
+          await hideSplashScreen()
+        } else {
+          await SplashScreen.hideAsync()
+        }
       }
     }
 
     if (isNavigationStateRestored) {
       prepare()
     }
-  }, [isNavigationStateRestored])
+  }, [isNavigationStateRestored, hideSplashScreen])
 
   if (!isNavigationStateRestored) return null
 
   return (
-    <SafeAreaProvider>
-      <KeyboardProvider>
+    <GestureHandlerRootView style={$container}>
+      <SafeAreaProvider initialMetrics={initialWindowMetrics}>
         <RootStoreProvider value={rootStore}>
           <ErrorBoundary catchErrors={Config.catchErrors}>
             <AppNavigator
@@ -132,8 +128,8 @@ export function App() {
             />
           </ErrorBoundary>
         </RootStoreProvider>
-      </KeyboardProvider>
-    </SafeAreaProvider>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   )
 }
 

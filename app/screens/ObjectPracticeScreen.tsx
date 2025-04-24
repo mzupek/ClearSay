@@ -1,4 +1,4 @@
-import React, { useState } from "react"
+import React, { useState, useEffect, useCallback } from "react"
 import { View, ViewStyle, Image, ImageStyle, Alert, TextStyle } from "react-native"
 import { Screen, Text, Button } from "app/components"
 import { colors, spacing } from "app/theme"
@@ -7,57 +7,101 @@ import { useStores } from "app/models"
 import { useNavigation } from "@react-navigation/native"
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack"
 import { speak } from "app/utils/speech"
+import { Instance } from "mobx-state-tree"
+import { ObjectModel, ObjectSetModel } from "app/models"
+import { RootStoreModel } from "app/models/RootStore"
+import { NativeStackScreenProps } from "@react-navigation/native-stack"
+import { ObjectTabParamList } from "app/navigators/ObjectNavigator"
 
-type NavigationProps = NativeStackNavigationProp<any>
+type NavigationProps = NativeStackNavigationProp<ObjectTabParamList>
+export type ObjectType = Instance<typeof ObjectModel>
+export type ObjectSetType = Instance<typeof ObjectSetModel>
+type RootStoreType = Instance<typeof RootStoreModel>
 
-export const ObjectPracticeScreen = observer(function ObjectPracticeScreen() {
-  const { objectStore, objectSetStore } = useStores()
+interface ObjectPracticeScreenProps extends NativeStackScreenProps<ObjectTabParamList, "ObjectPractice"> {}
+
+export const ObjectPracticeScreen = observer(function ObjectPracticeScreen(props: ObjectPracticeScreenProps) {
+  const store = useStores() as RootStoreType
   const navigation = useNavigation<NavigationProps>()
-  const [isSessionActive, setIsSessionActive] = useState(false)
-  const [currentObject, setCurrentObject] = useState<any>(null)
-  const [showingAnswer, setShowingAnswer] = useState(false)
-  const [sessionScore, setSessionScore] = useState({ correct: 0, total: 0 })
-  const [currentSetId, setCurrentSetId] = useState<string | null>(null)
+  const [isListening, setIsListening] = useState(false)
+  const [isPlaying, setIsPlaying] = useState(false)
+  const [isShowingAnswer, setIsShowingAnswer] = useState(false)
+  const [isCorrect, setIsCorrect] = useState<boolean | null>(null)
+  const [lastSpokenText, setLastSpokenText] = useState("")
+  const [currentIndex, setCurrentIndex] = useState(0)
+  const [activeObjects, setActiveObjects] = useState<ObjectType[]>([])
+  const [activeSets, setActiveSets] = useState<ObjectSetType[]>([])
 
-  const getActiveObjects = () => {
-    const activeSets = objectSetStore.activeSets
-    const activeObjectIds = new Set(activeSets.flatMap(set => set.objectIds))
-    return objectStore.objects.filter(obj => activeObjectIds.has(obj.id))
-  }
+  const currentSet = store.currentObjectSet
+  const practiceSession = store.practiceSession
 
-  const handleManageSets = () => {
-    const sets = objectSetStore.setList
-    Alert.alert(
-      "Manage Practice Sets",
-      "Which sets would you like to practice with?\n\nCurrently active sets:\n" + 
-      objectSetStore.activeSets.map(set => `• ${set.name}`).join('\n'),
-      [
-        { text: "Close", style: "cancel" },
-        {
-          text: "Select Sets",
-          onPress: () => {
-            // Show multi-select dialog for sets
-            Alert.alert(
-              "Select Sets",
-              "Tap sets to toggle them on/off:",
-              sets.map(set => ({
-                text: `${set.name} (${set.isActive ? "✓" : "×"})`,
-                onPress: () => {
-                  objectSetStore.toggleSetActive(set.id)
-                  // Refresh the selection dialog
-                  handleManageSets()
-                }
-              })),
-              { cancelable: true }
-            )
-          }
-        }
-      ]
+  useEffect(() => {
+    if (!currentSet && practiceSession.isActive) {
+      practiceSession.endSession()
+    }
+  }, [currentSet])
+
+  useEffect(() => {
+    if (!currentSet) {
+      // Find and set the default set if none is selected
+      const defaultSet = store.objectSets.find(set => set.isDefault)
+      if (defaultSet) {
+        store.setCurrentObjectSet(defaultSet)
+        return
+      }
+    }
+
+    const firstObject = currentSet?.objects[0]
+    if (firstObject) {
+      practiceSession.startSession(currentSet.id, firstObject.id)
+    }
+
+    return () => {
+      practiceSession.endSession()
+    }
+  }, [currentSet, store.objectSets])
+
+  useEffect(() => {
+    const objects = store.objects.filter((obj: ObjectType) => 
+      activeSets.some((set: ObjectSetType) => set.objects.includes(obj))
     )
-  }
+    setActiveObjects(objects)
+  }, [activeSets, store.objects])
+
+  const handleNextObject = useCallback(() => {
+    if (!currentSet) return
+
+    const currentIndex = currentSet.objects.findIndex((obj: ObjectType) => obj.id === practiceSession.currentObjectId)
+    const nextObject = currentSet.objects[currentIndex + 1]
+
+    if (nextObject) {
+      practiceSession.setCurrentObject(nextObject.id)
+      setIsShowingAnswer(false)
+      setIsCorrect(null)
+      setLastSpokenText("")
+    } else {
+      // End of practice session
+      navigation.goBack()
+    }
+  }, [currentSet, practiceSession])
+
+  const handleSpeechResult = useCallback((text: string) => {
+    setLastSpokenText(text)
+    const currentObject = currentSet?.objects.find((obj: ObjectType) => obj.id === practiceSession.currentObjectId)
+    if (!currentObject) return
+
+    const isAnswerCorrect = text.toLowerCase().includes(currentObject.name.toLowerCase())
+    setIsCorrect(isAnswerCorrect)
+    practiceSession.recordAnswer(isAnswerCorrect)
+    setIsShowingAnswer(true)
+  }, [currentSet, practiceSession])
+
+  const handleManageSets = useCallback(() => {
+    navigation.navigate("ObjectManager")
+  }, [navigation])
 
   const startPractice = () => {
-    const activeSets = objectSetStore.activeSets
+    const activeSets = store.objectSets.filter((set: ObjectSetType) => set.isActive)
     if (activeSets.length === 0) {
       Alert.alert(
         "No Active Sets",
@@ -68,49 +112,15 @@ export const ObjectPracticeScreen = observer(function ObjectPracticeScreen() {
 
     if (activeSets.length === 1) {
       const activeSet = activeSets[0]
-      setCurrentSetId(activeSet.id)
-      const setObjects = activeSet.objectIds
-        .map(id => objectStore.objects.find(obj => obj.id === id))
-        .filter(Boolean)
-      
-      if (setObjects.length === 0) {
-        Alert.alert(
-          "Empty Set",
-          "The selected set has no objects. Please add objects to the set."
-        )
-        return
-      }
-
-      const shuffledObjects = [...setObjects].sort(() => Math.random() - 0.5)
-      setSessionScore({ correct: 0, total: 0 })
-      setCurrentObject(shuffledObjects[0])
-      setIsSessionActive(true)
-      setShowingAnswer(false)
+      practiceSession.startSession(activeSet.id, activeSet.objects[0].id)
     } else {
       Alert.alert(
         "Select Set",
         "Which set would you like to practice?",
-        activeSets.map(set => ({
+        activeSets.map((set: ObjectSetType) => ({
           text: set.name,
           onPress: () => {
-            setCurrentSetId(set.id)
-            const setObjects = set.objectIds
-              .map(id => objectStore.objects.find(obj => obj.id === id))
-              .filter(Boolean)
-            
-            if (setObjects.length === 0) {
-              Alert.alert(
-                "Empty Set",
-                "The selected set has no objects. Please add objects to the set."
-              )
-              return
-            }
-
-            const shuffledObjects = [...setObjects].sort(() => Math.random() - 0.5)
-            setSessionScore({ correct: 0, total: 0 })
-            setCurrentObject(shuffledObjects[0])
-            setIsSessionActive(true)
-            setShowingAnswer(false)
+            practiceSession.startSession(set.id, set.objects[0].id)
           }
         }))
       )
@@ -118,70 +128,32 @@ export const ObjectPracticeScreen = observer(function ObjectPracticeScreen() {
   }
 
   const handleSpeak = async () => {
-    if (currentObject) {
-      await speak(currentObject.name)
+    if (currentSet && practiceSession.currentObjectId) {
+      await speak(currentSet.objects.find((obj: ObjectType) => obj.id === practiceSession.currentObjectId)?.name || "")
     }
   }
 
   const handleSpellWord = async () => {
-    if (currentObject) {
+    if (currentSet && practiceSession.currentObjectId) {
       try {
-        const word = currentObject.name.toLowerCase()
+        const word = currentSet.objects.find((obj: ObjectType) => obj.id === practiceSession.currentObjectId)?.name.toLowerCase() || ""
         const spellOut = word.split('').join('... ')
-        await speak(spellOut, { rate: 0.5 })
+        await speak(spellOut)
       } catch (error) {
         console.error('Error spelling word:', error)
       }
     }
   }
 
-  const handleShowAnswer = () => {
-    setShowingAnswer(true)
-  }
-
   const handleAnswerResponse = (correct: boolean) => {
-    if (!currentObject || !currentSetId) return
+    if (!currentSet || !practiceSession.currentObjectId) return
 
-    const currentSet = objectSetStore.getSetById(currentSetId)
-    if (!currentSet) return
-
-    objectStore.updateObjectScore(
-      currentObject.id,
-      correct,
-      currentSet.id,
-      currentSet.name
-    )
-
-    setSessionScore(prev => ({
-      correct: prev.correct + (correct ? 1 : 0),
-      total: prev.total + 1
-    }))
-
-    const nextIndex = objectStore.objects.indexOf(currentObject) + 1
-    if (nextIndex < objectStore.objects.length) {
-      setCurrentObject(objectStore.objects[nextIndex])
-      setShowingAnswer(false)
-    } else {
-      Alert.alert(
-        "Practice Complete",
-        `Session complete!\nTotal correct: ${sessionScore.correct + (correct ? 1 : 0)}\nTotal attempts: ${sessionScore.total + 1}`,
-        [
-          {
-            text: "OK",
-            onPress: () => {
-              setIsSessionActive(false)
-              setCurrentObject(null)
-              setShowingAnswer(false)
-              setSessionScore({ correct: 0, total: 0 })
-            }
-          }
-        ]
-      )
-    }
+    practiceSession.recordAnswer(correct)
+    handleNextObject()
   }
 
   const handleExitSession = () => {
-    if (isSessionActive) {
+    if (practiceSession.isActive) {
       Alert.alert(
         "Exit Session",
         "Are you sure you want to end this practice session?",
@@ -191,65 +163,83 @@ export const ObjectPracticeScreen = observer(function ObjectPracticeScreen() {
             text: "Exit", 
             style: "destructive",
             onPress: () => {
-              setIsSessionActive(false)
-              setCurrentObject(null)
-              setShowingAnswer(false)
+              practiceSession.endSession()
+              navigation.getParent()?.navigate("Welcome")
             }
           }
         ]
       )
     } else {
-      navigation.navigate("Welcome")
+      navigation.getParent()?.navigate("Welcome")
     }
   }
 
   return (
-    <Screen preset="scroll">
-      <View style={$container}>
-        <View style={$header}>
-          <Text preset="heading" text="Object Practice" style={$title} />
-          <Button
-            text="⬅️ Exit"
-            onPress={handleExitSession}
-            style={[$button, $exitButton]}
-            textStyle={$whiteText}
+    <Screen
+      preset="fixed"
+      contentContainerStyle={$screenContentContainer}
+      style={$root}
+      safeAreaEdges={["top"]}
+    >
+      {!currentSet ? (
+        <View style={$startContainer}>
+          <Text 
+            text="No Object Set Selected" 
+            style={$noSetTitle} 
           />
-        </View>
-        
-        {!isSessionActive ? (
-          <View style={$startContainer}>
-            {/* <Text preset="heading" text="Practice Objects" style={$title} /> */}
-            <View style={$buttonContainer}>
-              <Button
-                text="Start Practice ➡️"
-                onPress={startPractice}
-                style={[$button, $practiceButton]}
-                textStyle={$whiteText}
-              />
-              <Button
-                text="Select Object Sets ☑️"
-                onPress={handleManageSets}
-                style={[$button, $ordersetsButton]}
-                textStyle={$whiteText}
-              />
-            </View>
+          <Text 
+            text="Please select an object set to begin practice" 
+            style={$noSetMessage} 
+          />
+          <View style={$buttonContainer}>
+            <Button
+              text="Select Object Sets ☑️"
+              onPress={handleManageSets}
+              style={[$button, $ordersetsButton]}
+              textStyle={$whiteText}
+            />
           </View>
-        ) : (
-          <View style={$practiceContainer}>
-            {currentObject && (
-              <>
-                <View style={$flashCard}>
+        </View>
+      ) : !practiceSession.isActive ? (
+        <View style={$startContainer}>
+          <View style={$buttonContainer}>
+            <Button
+              text="Start Practice ➡️"
+              onPress={startPractice}
+              style={[$button, $practiceButton]}
+              textStyle={$whiteText}
+            />
+            <Button
+              text="Select Object Sets ☑️"
+              onPress={handleManageSets}
+              style={[$button, $ordersetsButton]}
+              textStyle={$whiteText}
+            />
+          </View>
+        </View>
+      ) : (
+        <View style={$practiceContainer}>
+          {currentSet && practiceSession.currentObjectId && (
+            <>
+              <View style={$flashCard}>
+                <View style={$imageContainer}>
                   <Image 
-                    source={currentObject.isDefault ? currentObject.uri : { uri: currentObject.uri.uri }}
+                    source={currentSet.objects.find((obj: ObjectType) => obj.id === practiceSession.currentObjectId)?.isDefault ? 
+                      currentSet.objects.find((obj: ObjectType) => obj.id === practiceSession.currentObjectId)?.uri : 
+                      { uri: currentSet.objects.find((obj: ObjectType) => obj.id === practiceSession.currentObjectId)?.uri }}
                     style={$image}
-                    resizeMode="cover"
+                    resizeMode="contain"
                   />
-                  <Text text={currentObject.name} style={$wordText} />
+                </View>
+                <View style={$textContainer}>
+                  <Text text={currentSet.objects.find((obj: ObjectType) => obj.id === practiceSession.currentObjectId)?.name} style={$wordText} />
                   <Text 
-                    text={`Session Score: ${sessionScore.correct}/${sessionScore.total}`} 
+                    text={`Session Score: ${practiceSession.score.correct}/${practiceSession.score.total}`}
                     style={$scoreText}
                   />
                 </View>
+              </View>
+              <View style={$buttonsContainer}>
                 <View style={$actionButtons}>
                   <Button
                     text="Say Word 🎤"
@@ -278,36 +268,31 @@ export const ObjectPracticeScreen = observer(function ObjectPracticeScreen() {
                     textStyle={$whiteText}
                   />
                 </View>
-              </>
-            )}
-          </View>
-        )}
-      </View>
+              </View>
+            </>
+          )}
+        </View>
+      )}
     </Screen>
   )
 })
 
-const $container: ViewStyle = {
+const $screenContentContainer: ViewStyle = {
   flex: 1,
-  padding: spacing.medium,
-  // alignItems: 'center',
+}
+
+const $root: ViewStyle = {
+  flex: 1,
+  backgroundColor: colors.background,
 }
 
 const $header: ViewStyle = {
   flexDirection: "row",
-  justifyContent: "space-between",
-  // alignItems: "center",
-  marginBottom: spacing.large,
-}
-
-const $title: ViewStyle = {
-  marginBottom: spacing.large,
-  marginRight: spacing.large,
-}
-
-const $buttonContainer: ViewStyle = {
-  gap: spacing.medium,
-  marginTop: spacing.large,
+  justifyContent: "center",
+  alignItems: "center",
+  paddingVertical: spacing.tiny,
+  borderBottomWidth: 1,
+  borderBottomColor: colors.separator,
 }
 
 const $startContainer: ViewStyle = {
@@ -315,126 +300,172 @@ const $startContainer: ViewStyle = {
   justifyContent: "center",
   alignItems: "center",
   gap: spacing.medium,
+  paddingHorizontal: spacing.medium,
 }
 
 const $practiceContainer: ViewStyle = {
   flex: 1,
-  alignItems: "center",
-  gap: spacing.large,
+  paddingHorizontal: spacing.medium,
 }
 
 const $flashCard: ViewStyle = {
-  backgroundColor: 'white',
+  backgroundColor: colors.background,
   borderRadius: 16,
   padding: spacing.medium,
-  shadowColor: 'black',
+  shadowColor: colors.palette.neutral800,
   shadowOffset: { width: 0, height: 2 },
   shadowOpacity: 0.25,
   shadowRadius: 4,
   elevation: 5,
-  alignItems: 'center',
+  alignItems: "center",
+  width: "100%",
+  maxWidth: 400,
+  marginBottom: spacing.large,
+  marginTop: -50,
+}
+
+const $imageContainer: ViewStyle = {
+  width: "100%",
+  aspectRatio: 1,
+  alignItems: "center",
+  justifyContent: "center",
+  backgroundColor: colors.palette.neutral200,
+  borderRadius: 8,
+  overflow: "hidden",
+  marginBottom: spacing.medium,
+}
+
+const $textContainer: ViewStyle = {
+  alignItems: "center",
+  width: "100%",
+  paddingVertical: spacing.small,
+}
+
+const $buttonsContainer: ViewStyle = {
+  width: "100%",
   gap: spacing.medium,
+  paddingBottom: spacing.large,
 }
 
 const $actionButtons: ViewStyle = {
-  gap: spacing.small,
-  alignItems: 'center',
-  flexDirection: 'row',
+  flexDirection: "row",
+  gap: spacing.medium,
+  justifyContent: "center",
+  width: "100%",
+  marginBottom: spacing.medium,
 }
 
 const $image: ImageStyle = {
-  width: 250,
-  height: 250,
-  borderRadius: 8,
+  width: "80%",
+  height: "80%",
 }
 
 const $wordText: TextStyle = {
-  fontSize: 32,
+  fontSize: 48,
   fontWeight: "bold",
-  textAlign: 'center',
-  lineHeight: 30
+  textAlign: "center",
+  color: colors.text,
+  includeFontPadding: false,
+  lineHeight: 56,
 }
 
 const $responseButtons: ViewStyle = {
   flexDirection: "row",
-  gap: spacing.small,
-  alignItems: 'center',
+  gap: spacing.medium,
+  justifyContent: "center",
+  width: "100%",
 }
 
 const $wrongButton: ViewStyle = {
-  backgroundColor: 'darkred',
+  backgroundColor: colors.palette.angry500,
+  flex: 1,
+  minHeight: 50,
 }
 
 const $rightButton: ViewStyle = {
-  backgroundColor: 'darkgreen',
-}
-
-const $selectSetsButton: ViewStyle = {
-  backgroundColor: colors.palette.neutral700,
-}
-
-const $exitButton: ViewStyle = {
-  backgroundColor: colors.palette.angry500,
-  padding: spacing.medium,
-  borderRadius: 10,
+  backgroundColor: colors.palette.secondary500,
+  flex: 1,
+  minHeight: 50,
 }
 
 const $scoreText: TextStyle = {
   fontSize: 16,
   color: colors.text,
-  marginTop: spacing.small,
 }
 
 const $button: ViewStyle = {
-  padding: 10,
-  // minWidth: 200,
+  borderRadius: 12,
+  paddingVertical: spacing.medium,
+  paddingHorizontal: spacing.medium,
+  minHeight: 50,
 }
 
 const $sayButton: ViewStyle = {
   backgroundColor: colors.palette.accent500,
+  flex: 1,
 }
 
 const $spellButton: ViewStyle = {
-  backgroundColor: 'blue',
+  backgroundColor: colors.palette.secondary500,
+  flex: 1,
 }
 
 const $whiteText: TextStyle = {
-  color: 'white', 
-  fontWeight: 'bold',
-  fontSize: 22,
-  lineHeight: 24,
+  color: colors.palette.neutral100,
+  fontWeight: "bold",
+  fontSize: 18,
+  textAlign: "center",
 }
 
 const $practiceButton: ViewStyle = {
-  backgroundColor: 'green',
-  borderRadius: 10,
-  padding: 10,
-  minHeight: 80,
-  shadowColor: 'black',
-  shadowOffset: { width: 5, height: 5 },
-  shadowOpacity: 1,
-  shadowRadius: 5,
+  backgroundColor: colors.palette.secondary500,
+  borderRadius: 12,
+  padding: spacing.medium,
+  minHeight: 50,
+  shadowColor: colors.palette.neutral900,
+  shadowOffset: { width: 2, height: 2 },
+  shadowOpacity: 0.25,
+  shadowRadius: 4,
   elevation: 5,
-  minWidth: '85%',
+  width: "100%",
 }
 
 const $ordersetsButton: ViewStyle = {
   backgroundColor: colors.palette.accent500,
-  borderRadius: 10,
-  padding: 10,
-  minHeight: 80,
-  shadowColor: 'black',
-  shadowOffset: { width: 5, height: 5 },
-  shadowOpacity: 1,
-  shadowRadius: 5,
+  borderRadius: 12,
+  padding: spacing.medium,
+  minHeight: 50,
+  shadowColor: colors.palette.neutral900,
+  shadowOffset: { width: 2, height: 2 },
+  shadowOpacity: 0.25,
+  shadowRadius: 4,
   elevation: 5,
-  minWidth: '85%',
+  width: "100%",
 }
 
-const $checkIcon: ImageStyle = {
-  width: 24,
-  height: 24,
-  marginLeft: spacing.small,
-  tintColor: 'white',
-  
+const $noSetTitle: TextStyle = {
+  fontSize: 24,
+  fontWeight: "bold",
+  textAlign: "center",
+  marginBottom: spacing.small,
+  color: colors.text,
+}
+
+const $noSetMessage: TextStyle = {
+  fontSize: 16,
+  textAlign: "center",
+  marginBottom: spacing.large,
+  color: colors.textDim,
+}
+
+const $title: TextStyle = {
+  fontSize: 24,
+  color: colors.text,
+}
+
+const $buttonContainer: ViewStyle = {
+  gap: spacing.medium,
+  marginTop: spacing.large,
+  width: "100%",
+  paddingHorizontal: spacing.large,
 }

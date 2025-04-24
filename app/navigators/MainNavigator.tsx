@@ -1,7 +1,7 @@
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs"
 import { PracticeScreen } from "app/screens/PracticeScreen"
-import { SettingsScreen } from "app/screens/SettingsScreen"
 import { ProgressScreen } from "app/screens/ProgressScreen"
+import { SettingsScreen } from "app/screens/SettingsScreen"
 import { colors } from "app/theme"
 import { Icon } from "app/components"
 
@@ -28,14 +28,15 @@ export function MainNavigator() {
         tabBarActiveTintColor: colors.tint,
         tabBarInactiveTintColor: colors.text,
       }}
+      initialRouteName="Practice"
     >
       <Tab.Screen 
         name="Practice" 
         component={PracticeScreen}
         options={{
-          tabBarLabel: 'Practice',
+          title: "Visual Scanning",
           tabBarIcon: ({ color, size }) => (
-            <Icon icon="components" color={color} size={size} />
+            <Icon icon="view" color={color} size={size} />
           ),
         }}
       />
@@ -43,9 +44,9 @@ export function MainNavigator() {
         name="Progress" 
         component={ProgressScreen}
         options={{
-          tabBarLabel: 'Progress',
+          title: "Progress",
           tabBarIcon: ({ color, size }) => (
-            <Icon icon="view" color={color} size={size} />
+            <Icon icon="components" color={color} size={size} />
           ),
         }}
       />
@@ -53,7 +54,7 @@ export function MainNavigator() {
         name="Settings" 
         component={SettingsScreen}
         options={{
-          tabBarLabel: 'Settings',
+          title: "Settings",
           tabBarIcon: ({ color, size }) => (
             <Icon icon="settings" color={color} size={size} />
           ),

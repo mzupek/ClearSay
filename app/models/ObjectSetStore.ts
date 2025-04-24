@@ -2,15 +2,36 @@ import { Instance, types } from "mobx-state-tree"
 import * as storage from "app/utils/storage"
 import { defaultImages } from "./ObjectStore"
 
+const SetObjectModel = types
+  .model("SetObject")
+  .props({
+    id: types.string,
+    order: types.optional(types.number, 0)
+  })
+
 export const ObjectSetStore = types
   .model("ObjectSetStore")
   .props({
     sets: types.array(types.model({
       id: types.identifier,
       name: types.string,
-      objectIds: types.array(types.string),
-      isActive: types.optional(types.boolean, false),
-      isDefault: types.optional(types.boolean, false)
+      description: types.optional(types.string, ""),
+      category: types.optional(types.string, ""),
+      tags: types.optional(types.array(types.string), []),
+      objects: types.array(SetObjectModel),
+      settings: types.optional(
+        types.model({
+          isActive: types.optional(types.boolean, false),
+          isDefault: types.optional(types.boolean, false),
+          practiceMode: types.optional(
+            types.enumeration(["sequential", "random", "adaptive"]),
+            "random"
+          )
+        }),
+        {}
+      ),
+      dateCreated: types.optional(types.Date, () => new Date()),
+      dateModified: types.optional(types.Date, () => new Date())
     }))
   })
   .views(self => ({
@@ -21,56 +42,111 @@ export const ObjectSetStore = types
       return self.sets.find(set => set.id === id)
     },
     get activeSets() {
-      return self.sets.filter(set => set.isActive)
+      return self.sets.filter(set => set.settings.isActive)
+    },
+    getSetsByCategory(category: string) {
+      return self.sets.filter(set => set.category === category)
+    },
+    getSetsByTag(tag: string) {
+      return self.sets.filter(set => set.tags.includes(tag))
     }
   }))
   .actions(self => ({
     replaceSets(newSets: any[]) {
       self.sets.replace(newSets)
     },
-    addSet(set: { id: string; name: string; objectIds: string[]; isActive?: boolean; isDefault?: boolean }) {
+    addSet(setData: {
+      id: string
+      name: string
+      description?: string
+      category?: string
+      tags?: string[]
+      objects?: { id: string; order?: number }[]
+      settings?: {
+        isActive?: boolean
+        isDefault?: boolean
+        practiceMode?: "sequential" | "random" | "adaptive"
+      }
+    }) {
       const newSet = {
-        ...set,
-        isActive: set.isActive ?? false,
-        isDefault: set.isDefault ?? false
+        ...setData,
+        description: setData.description || "",
+        category: setData.category || "",
+        tags: setData.tags || [],
+        objects: (setData.objects || []).map((obj, index) => ({
+          id: obj.id,
+          order: obj.order ?? index
+        })),
+        settings: {
+          isActive: setData.settings?.isActive ?? false,
+          isDefault: setData.settings?.isDefault ?? false,
+          practiceMode: setData.settings?.practiceMode ?? "random"
+        },
+        dateCreated: new Date(),
+        dateModified: new Date()
       }
       self.sets.push(newSet)
       this.saveSets()
     },
-    removeSet(id: string) {
-      const index = self.sets.findIndex(set => set.id === id)
-      if (index !== -1 && !self.sets[index].isDefault) {
-        self.sets.splice(index, 1)
-        this.saveSets()
+    updateSet(
+      id: string,
+      updates: {
+        name?: string
+        description?: string
+        category?: string
+        tags?: string[]
+        settings?: {
+          isActive?: boolean
+          isDefault?: boolean
+          practiceMode?: "sequential" | "random" | "adaptive"
+        }
       }
-    },
-    toggleSetActive(id: string) {
-      const set = self.sets.find(set => set.id === id)
+    ) {
+      const set = self.getSetById(id)
       if (set) {
-        set.isActive = !set.isActive
+        Object.assign(set, {
+          ...updates,
+          dateModified: new Date()
+        })
         this.saveSets()
       }
     },
-    addObjectToSet(setId: string, objectId: string) {
-      const set = self.sets.find(set => set.id === setId)
-      if (set && !set.objectIds.includes(objectId)) {
-        set.objectIds.push(objectId)
+    addObjectToSet(setId: string, objectId: string, order?: number) {
+      const set = self.getSetById(setId)
+      if (set) {
+        const maxOrder = Math.max(...set.objects.map(obj => obj.order), -1)
+        set.objects.push({
+          id: objectId,
+          order: order ?? maxOrder + 1
+        })
+        set.dateModified = new Date()
         this.saveSets()
       }
     },
     removeObjectFromSet(setId: string, objectId: string) {
-      const set = self.sets.find(set => set.id === setId)
+      const set = self.getSetById(setId)
       if (set) {
-        const index = set.objectIds.indexOf(objectId)
-        if (index !== -1) {
-          set.objectIds.splice(index, 1)
-          this.saveSets()
-        }
+        const filteredObjects = set.objects.filter(obj => obj.id !== objectId)
+        set.objects.replace(filteredObjects)
+        set.dateModified = new Date()
+        this.saveSets()
+      }
+    },
+    reorderObjects(setId: string, objectIds: string[]) {
+      const set = self.getSetById(setId)
+      if (set) {
+        const newObjects = objectIds.map((id, index) => ({
+          id,
+          order: index
+        }))
+        set.objects.replace(newObjects)
+        set.dateModified = new Date()
+        this.saveSets()
       }
     },
     async saveSets() {
       try {
-        await storage.save("objectSets", self.setList)
+        await storage.save("objectSets", self.sets.toJSON())
       } catch (error) {
         console.error('Error saving object sets:', error)
       }
@@ -86,9 +162,15 @@ export const ObjectSetStore = types
           this.addSet({
             id: "default_set",
             name: "Default Objects",
-            objectIds: defaultObjectIds,
-            isActive: false,
-            isDefault: true
+            objects: defaultObjectIds.map((id, index) => ({
+              id,
+              order: index
+            })),
+            settings: {
+              isActive: false,
+              isDefault: true,
+              practiceMode: "random"
+            }
           })
         }
       } catch (error) {

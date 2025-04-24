@@ -133,8 +133,9 @@ const $heading: TextStyle = {
 
 const $statsContainer: ViewStyle = {
   flexDirection: "row",
-  justifyContent: "space-around",
+  justifyContent: "space-between",
   marginBottom: spacing.extraLarge,
+  paddingHorizontal: spacing.small,
 }
 
 const $statBox: ViewStyle = {
@@ -142,18 +143,21 @@ const $statBox: ViewStyle = {
   backgroundColor: colors.palette.neutral100,
   padding: spacing.medium,
   borderRadius: 8,
-  minWidth: 150,
+  flex: 1,
+  marginHorizontal: spacing.tiny,
 }
 
 const $statLabel: TextStyle = {
   fontSize: 14,
   color: colors.textDim,
   marginBottom: spacing.extraSmall,
+  textAlign: "center",
 }
 
 const $statValue: TextStyle = {
   fontSize: 24,
   fontWeight: "bold",
+  textAlign: "center",
 }
 
 const $subheading: TextStyle = {

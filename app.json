@@ -44,7 +44,10 @@
         "resizeMode": "contain",
         "backgroundColor": "#191015"
       },
-      "requireFullScreen": true
+      "requireFullScreen": true,
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "web": {
       "favicon": "./assets/images/app-icon-web-favicon.png",
@@ -61,21 +64,28 @@
         "expo-build-properties",
         {
           "ios": {
-            "newArchEnabled": false
+            "newArchEnabled": true
           },
           "android": {
-            "newArchEnabled": false
+            "newArchEnabled": true
           }
         }
       ],
       "expo-font"
     ],
     "experiments": {
-      "tsconfigPaths": true
+      "tsconfigPaths": true,
+      "newArchEnabled": true
     },
-    "platforms": ["ios", "android", "macos"]
-  },
-  "ignite": {
-    "version": "10.0.5"
+    "platforms": [
+      "ios",
+      "android",
+      "macos"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "3c3e6861-02fb-43b7-b6bc-c2d5cd0734c9"
+      }
+    }
   }
 }

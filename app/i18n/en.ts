@@ -2,7 +2,7 @@ import demoEn from "./demo-en"
 
 const en = {
   common: {
-    ok: "OK!",
+    ok: "OK",
     cancel: "Cancel",
     back: "Back",
     logOut: "Log Out",
@@ -12,7 +12,6 @@ const en = {
       "psst  — This probably isn't what your app looks like. (Unless your designer handed you these screens, and in that case, ship it!)",
     readyForLaunch: "Your app, almost ready for launch!",
     exciting: "(ohh, this is exciting!)",
-    letsGo: "Let's go!",
   },
   errorScreen: {
     title: "Something went wrong!",
@@ -120,6 +119,21 @@ const en = {
       content:
         "No favorites have been added yet. Tap the heart on an episode to add it to your favorites!",
     },
+  },
+  objectSetScreen: {
+    title: "Object Set",
+    practice: "Practice",
+    progress: "Progress",
+  },
+  practiceScreen: {
+    title: "Practice",
+  },
+  objectPracticeScreen: {
+    sessionScore: "Session Score: {{correct}}/{{total}}",
+    sayWord: "Say Word 🎤",
+    spellWord: "Spell Word 🐝",
+    wrongAnswer: "Got it Wrong ❌",
+    rightAnswer: "Got it Right ✅",
   },
 
   ...demoEn,
