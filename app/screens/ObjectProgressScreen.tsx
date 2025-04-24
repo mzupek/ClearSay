@@ -5,95 +5,52 @@ import { colors, spacing } from "app/theme"
 import { observer } from "mobx-react-lite"
 import { useStores } from "app/models"
 import { format, subDays, startOfToday, endOfToday } from "date-fns"
-import { ObjectModel, ObjectSetModel } from "app/models"
 import { Instance } from "mobx-state-tree"
+import { RootStoreModel } from "app/models/RootStore"
 
-type ObjectType = Instance<typeof ObjectModel>
-type ObjectSetType = Instance<typeof ObjectSetModel>
-
-interface ObjectMetadata {
-  attempts: number
-  correctAttempts: number
-  lastPracticed: Date | null
-}
-
-interface Attempt {
-  timestamp: number
-  correct: boolean
-  setId: string
-  objectName?: string
-}
-
-interface AttemptWithObject extends Attempt {
-  objectName: string
-}
+type RootStoreType = Instance<typeof RootStoreModel>
 
 export const ObjectProgressScreen = observer(function ObjectProgressScreen() {
-  const store = useStores()
+  const store = useStores() as RootStoreType
   const [selectedPeriod, setSelectedPeriod] = useState(7) // Default to 7 days
-  const [selectedSetId, setSelectedSetId] = useState<string | null>(null)
-
-  const getFilteredAttempts = (days: number, setId?: string | null): AttemptWithObject[] => {
-    const cutoffDate = subDays(new Date(), days).getTime()
-    const allAttempts = store.objects.flatMap((obj: ObjectType) => {
-      const metadata = (obj as any).metadata as ObjectMetadata || { attempts: 0, correctAttempts: 0, lastPracticed: null }
-      if (!metadata.lastPracticed || metadata.lastPracticed.getTime() < cutoffDate) {
-        return []
-      }
-      return [{
-        timestamp: metadata.lastPracticed.getTime(),
-        correct: metadata.correctAttempts > 0,
-        setId: setId || "all",
-        objectName: obj.name
-      }]
-    }).filter((attempt: AttemptWithObject) => attempt.timestamp >= cutoffDate)
-
-    return setId 
-      ? allAttempts.filter((attempt: AttemptWithObject) => attempt.setId === setId)
-      : allAttempts
-  }
-
-  const calculateStats = (attempts: AttemptWithObject[]) => {
-    const totalAttempts = attempts.length
-    const totalCorrect = attempts.filter((a: AttemptWithObject) => a.correct).length
-
-    return {
-      attempts: totalAttempts,
-      correct: totalCorrect,
-      accuracy: totalAttempts > 0 ? ((totalCorrect / totalAttempts) * 100).toFixed(1) : "0"
-    }
-  }
 
   const getDailyStats = () => {
-    const today = startOfToday().getTime()
-    const todayEnd = endOfToday().getTime()
-    
-    const todayAttempts = store.objects.flatMap((obj: ObjectType) => {
-      const metadata = (obj as any).metadata as ObjectMetadata || { attempts: 0, correctAttempts: 0, lastPracticed: null }
-      if (!metadata.lastPracticed || metadata.lastPracticed.getTime() < today || metadata.lastPracticed.getTime() > todayEnd) {
-        return []
-      }
-      return [{
-        timestamp: metadata.lastPracticed.getTime(),
-        correct: metadata.correctAttempts > 0,
-        setId: "all"
-      }]
-    })
-
+    if (!store.practiceSession) return { attempts: 0, correct: 0 }
     return {
-      attempts: todayAttempts.length,
-      correct: todayAttempts.filter((a: Attempt) => a.correct).length
+      attempts: store.practiceSession.totalAttempts,
+      correct: store.practiceSession.correctAnswers
     }
   }
 
-  const periodAttempts = getFilteredAttempts(selectedPeriod)
-  const periodStats = calculateStats(periodAttempts)
+  const getPeriodStats = () => {
+    if (!store.practiceSession) return { attempts: 0, correct: 0, accuracy: "0" }
+    const { correctAnswers, totalAttempts } = store.practiceSession
+    return {
+      attempts: totalAttempts,
+      correct: correctAnswers,
+      accuracy: totalAttempts > 0 ? ((correctAnswers / totalAttempts) * 100).toFixed(1) : "0"
+    }
+  }
+
+  const getSetStats = (setId: string) => {
+    if (!store.practiceSession) return { attempts: 0, correct: 0, accuracy: "0" }
+    if (store.practiceSession.currentSetId !== setId) return { attempts: 0, correct: 0, accuracy: "0" }
+    
+    const { correctAnswers, totalAttempts } = store.practiceSession
+    return {
+      attempts: totalAttempts,
+      correct: correctAnswers,
+      accuracy: totalAttempts > 0 ? ((correctAnswers / totalAttempts) * 100).toFixed(1) : "0"
+    }
+  }
+
   const dailyStats = getDailyStats()
+  const periodStats = getPeriodStats()
 
   return (
     <Screen preset="scroll" contentContainerStyle={$screenContainer}>
       <View style={$mainContainer}>
-        <Text text="Progress" preset="heading" style={$title} />
+        <Text text="Object Progress" preset="heading" style={$title} />
         
         <View style={$filterContainer}>
           {[7, 14, 30].map(days => (
@@ -144,9 +101,8 @@ export const ObjectProgressScreen = observer(function ObjectProgressScreen() {
 
         <Text text="Sets Progress" style={$sectionTitle} />
         <ScrollView style={$setsContainer}>
-          {store.objectSets.map((set: ObjectSetType) => {
-            const setAttempts = getFilteredAttempts(selectedPeriod, set.id)
-            const setStats = calculateStats(setAttempts)
+          {store.objectSets.map(set => {
+            const setStats = getSetStats(set.id)
             return (
               <Card
                 key={set.id}
@@ -190,9 +146,6 @@ const $mainContainer: ViewStyle = {
 }
 
 const $title: TextStyle = {
-  fontSize: 24,
-  fontWeight: "bold",
-  color: colors.text,
   marginBottom: spacing.large,
   textAlign: "center",
 }
@@ -329,12 +282,12 @@ const $resultMark: TextStyle = {
   textAlign: "center",
 }
 
-const $incorrectMark: TextStyle = {
-  color: colors.palette.angry500,
+const $correctMark: TextStyle = {
+  color: colors.palette.accent500,
 }
 
-const $correctMark: TextStyle = {
-  color: colors.palette.secondary500,
+const $incorrectMark: TextStyle = {
+  color: colors.palette.angry500,
 }
 
 const $metricsContainer: ViewStyle = {
@@ -423,7 +376,6 @@ const $timeRangeButtons: ViewStyle = {
   gap: spacing.small,
   marginBottom: spacing.extraLarge,
 }
-
 const $timeButton: ViewStyle = {
   paddingVertical: spacing.extraSmall,
   paddingHorizontal: spacing.small,

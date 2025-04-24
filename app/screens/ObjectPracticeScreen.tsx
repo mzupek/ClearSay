@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from "react"
-import { View, ViewStyle, Image, ImageStyle, Alert, TextStyle } from "react-native"
-import { Screen, Text, Button } from "app/components"
+import { View, ViewStyle, Image, ImageStyle, Alert, TextStyle, TouchableOpacity } from "react-native"
+import { Screen, Text, Button, Icon } from "app/components"
 import { colors, spacing } from "app/theme"
 import { observer } from "mobx-react-lite"
 import { useStores } from "app/models"
@@ -23,6 +23,14 @@ interface ObjectPracticeScreenProps extends NativeStackScreenProps<ObjectTabPara
 export const ObjectPracticeScreen = observer(function ObjectPracticeScreen(props: ObjectPracticeScreenProps) {
   const store = useStores() as RootStoreType
   const navigation = useNavigation<NavigationProps>()
+
+  // Add navigation options to hide the header
+  React.useLayoutEffect(() => {
+    navigation.setOptions({
+      headerShown: false,
+    })
+  }, [navigation])
+
   const [isListening, setIsListening] = useState(false)
   const [isPlaying, setIsPlaying] = useState(false)
   const [isShowingAnswer, setIsShowingAnswer] = useState(false)
@@ -181,6 +189,16 @@ export const ObjectPracticeScreen = observer(function ObjectPracticeScreen(props
       style={$root}
       safeAreaEdges={["top"]}
     >
+      <View style={$header}>
+        <TouchableOpacity 
+          style={$backButton} 
+          onPress={handleExitSession}
+        >
+          <Icon icon="back" color={colors.text} size={24} />
+        </TouchableOpacity>
+        <Text text="Image Recognition" style={$title} />
+        <View style={$backButton} />
+      </View>
       {!currentSet ? (
         <View style={$startContainer}>
           <Text 
@@ -279,6 +297,7 @@ export const ObjectPracticeScreen = observer(function ObjectPracticeScreen(props
 
 const $screenContentContainer: ViewStyle = {
   flex: 1,
+  paddingTop: spacing.small,
 }
 
 const $root: ViewStyle = {
@@ -288,11 +307,14 @@ const $root: ViewStyle = {
 
 const $header: ViewStyle = {
   flexDirection: "row",
-  justifyContent: "center",
+  justifyContent: "space-between",
   alignItems: "center",
-  paddingVertical: spacing.tiny,
+  paddingVertical: spacing.extraSmall,
+  paddingHorizontal: spacing.small,
   borderBottomWidth: 1,
   borderBottomColor: colors.separator,
+  backgroundColor: colors.background,
+  height: 44,
 }
 
 const $startContainer: ViewStyle = {
@@ -320,8 +342,7 @@ const $flashCard: ViewStyle = {
   alignItems: "center",
   width: "100%",
   maxWidth: 400,
-  marginBottom: spacing.large,
-  marginTop: -50,
+  marginVertical: spacing.medium,
 }
 
 const $imageContainer: ViewStyle = {
@@ -459,8 +480,10 @@ const $noSetMessage: TextStyle = {
 }
 
 const $title: TextStyle = {
-  fontSize: 24,
+  fontSize: 20,
   color: colors.text,
+  textAlign: "center",
+  flex: 1,
 }
 
 const $buttonContainer: ViewStyle = {
@@ -468,4 +491,12 @@ const $buttonContainer: ViewStyle = {
   marginTop: spacing.large,
   width: "100%",
   paddingHorizontal: spacing.large,
+}
+
+const $backButton: ViewStyle = {
+  padding: spacing.extraSmall,
+  width: 44,
+  height: 44,
+  justifyContent: "center",
+  alignItems: "center",
 }
