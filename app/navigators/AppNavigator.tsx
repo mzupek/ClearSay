@@ -5,7 +5,7 @@ import { NavigationContainer, NavigationContainerRef } from "@react-navigation/n
 import { createNativeStackNavigator, NativeStackScreenProps } from "@react-navigation/native-stack"
 import { observer } from "mobx-react-lite"
 import { useStores } from "app/models"
-import { WelcomeScreen } from "app/screens/WelcomeScreen"
+import { WelcomeScreen } from "app/screens"
 import { MainNavigator } from "./MainNavigator"
 import { ObjectNavigator, ObjectTabParamList } from "./ObjectNavigator"
 import { ObjectSetScreen } from "app/screens/ObjectSetScreen"
@@ -13,6 +13,10 @@ import { CreateObjectSetScreen } from "app/screens/CreateObjectSetScreen"
 import { ManageObjectSetsScreen } from "app/screens/ManageObjectSetsScreen"
 import { colors } from "app/theme"
 import { useRef } from "react"
+import { PictureToWordNavigator } from "./PictureToWordNavigator"
+import { RecognitionNavigator } from "./RecognitionNavigator"
+
+export type InteractiveType = "PictureToWord" | "WordToPicture" | "Spelling" | "Pronunciation" | "Recognition"
 
 export type AppStackParamList = {
   Welcome: undefined
@@ -20,8 +24,24 @@ export type AppStackParamList = {
   ObjectTabs: {
     screen?: keyof ObjectTabParamList
   }
-  CreateObjectSet: undefined
-  ManageObjectSets: undefined
+  CreateObjectSet: {
+    editMode?: boolean
+    setId?: string
+    setData?: {
+      name: string
+      description: string
+      objects: any[] // We'll use any[] for now since the exact type is complex
+      category: string
+      practiceMode: "sequential" | "random" | "adaptive"
+      isActive: boolean
+    }
+  }
+  ManageObjectSets: {
+    interactiveType?: InteractiveType
+  }
+  ObjectManager: undefined
+  PictureToWordPractice: undefined
+  Recognition: undefined
 }
 
 export type AppStackScreenProps<T extends keyof AppStackParamList> = NativeStackScreenProps<AppStackParamList, T>
@@ -58,6 +78,9 @@ const AppStack = observer(function AppStack() {
           title: "Manage Object Sets"
         }}
       />
+      <Stack.Screen name="ObjectManager" component={ObjectNavigator} />
+      <Stack.Screen name="PictureToWordPractice" component={PictureToWordNavigator} />
+      <Stack.Screen name="Recognition" component={RecognitionNavigator} />
     </Stack.Navigator>
   )
 })

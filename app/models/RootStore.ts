@@ -6,6 +6,7 @@ import { defaultImages } from "./ObjectStore"
 import { PracticeStoreModel } from "./PracticeStore"
 import { SettingsStoreModel } from "./SettingsStore"
 import { PictureToWordPracticeModel } from "./PictureToWordPracticeModel"
+import { RecognitionPracticeModel } from "./RecognitionPracticeModel"
 
 export const PracticeSessionModel = types
   .model("PracticeSessionModel", {
@@ -60,13 +61,25 @@ export const RootStoreModel = types
     practiceSession: types.optional(PracticeSessionModel, {}),
     practiceStore: types.optional(PracticeStoreModel, {}),
     pictureToWordPractice: types.optional(PictureToWordPracticeModel, {
-      assignedSets: []
+      assignedSets: [],
+      isActive: false,
+      error: null,
+      wordChoices: [],
+      correctAnswers: 0,
+      totalAttempts: 0,
+      settings: {
+        numberOfChoices: 3,
+        announceChoices: true,
+        announceCorrectness: true
+      },
+      practiceMode: "random"
     }),
     settingsStore: types.optional(SettingsStoreModel, {
       selectedVoiceId: "",
       selectedVoiceName: "",
       availableVoices: []
-    })
+    }),
+    recognitionPractice: types.optional(RecognitionPracticeModel, {})
   })
   .views((self) => ({
     get objectList() {
@@ -80,8 +93,21 @@ export const RootStoreModel = types
     }
   }))
   .actions((self) => ({
+    setNavigationRef(ref: NavigationContainerRef<any>) {
+      self.navigationRef = ref
+    },
+    setCurrentUser(user: any) {
+      self.currentUser = user
+    },
     afterCreate() {
-      this.setupDefaultData()
+      console.log("RootStore created with:", {
+        objectSets: self.objectSets.length,
+        pictureToWordPractice: {
+          assignedSets: self.pictureToWordPractice.assignedSets.length,
+          isActive: self.pictureToWordPractice.isActive,
+          error: self.pictureToWordPractice.error
+        }
+      })
     },
     setupDefaultData() {
       // Check if we already have default objects
@@ -131,12 +157,6 @@ export const RootStoreModel = types
     },
     setCurrentObject(object: Instance<typeof ObjectModel> | null) {
       self.currentObject = object
-    },
-    setNavigationRef(ref: NavigationContainerRef<any>) {
-      self.navigationRef = ref
-    },
-    setCurrentUser(user: any | null) {
-      self.currentUser = user
     },
     addObject(object: Omit<SnapshotIn<typeof ObjectModel>, "id"> & { id?: string }) {
       const newObject = ObjectModel.create({

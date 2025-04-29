@@ -1,5 +1,5 @@
 import { createNativeStackNavigator } from "@react-navigation/native-stack"
-import { ObjectPracticeScreen } from "app/screens/ObjectPracticeScreen"
+import { ObjectPracticeNavigator } from "./ObjectPracticeNavigator"
 import { ObjectProgressScreen } from "app/screens/ObjectProgressScreen"
 import { ObjectManagerScreen } from "app/screens/ObjectManagerScreen"
 import { CreateObjectSetScreen } from "app/screens/CreateObjectSetScreen"
@@ -9,14 +9,16 @@ import { Icon } from "app/components"
 import { ObjectModel, ObjectSetModel } from "app/models"
 import { Instance } from "mobx-state-tree"
 import { PictureToWordNavigator } from "./PictureToWordNavigator"
+import { RecognitionNavigator } from "./RecognitionNavigator"
 
-export type InteractiveType = "PictureToWord" | "WordToPicture" | "Spelling" | "Pronunciation"
+export type InteractiveType = "PictureToWord" | "WordToPicture" | "Spelling" | "Pronunciation" | "Recognition"
 
 export type ObjectTabParamList = {
   ObjectPractice: undefined
   ObjectProgress: undefined
   ObjectManager: undefined
   PictureToWordPractice: undefined
+  Recognition: undefined
   CreateObjectSet: {
     editMode?: boolean
     setId?: string
@@ -40,10 +42,23 @@ export const ObjectNavigator = () => {
   return (
     <Stack.Navigator>
       <Stack.Screen name="ObjectManager" component={ObjectManagerScreen} />
-      <Stack.Screen name="ObjectPractice" component={ObjectPracticeScreen} />
+      <Stack.Screen 
+        name="ObjectPractice" 
+        component={ObjectPracticeNavigator}
+        options={{
+          headerShown: false
+        }}
+      />
       <Stack.Screen 
         name="PictureToWordPractice" 
         component={PictureToWordNavigator}
+        options={{
+          headerShown: false
+        }}
+      />
+      <Stack.Screen 
+        name="Recognition" 
+        component={RecognitionNavigator}
         options={{
           headerShown: false
         }}

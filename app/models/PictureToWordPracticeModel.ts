@@ -1,17 +1,24 @@
 import { Instance, types } from "mobx-state-tree"
 import { ObjectModel } from "./ObjectModel"
 import { ObjectSetModel } from "./ObjectSetModel"
+import * as storage from "app/utils/storage"
+
+const STORAGE_KEY = "pictureToWordPractice"
+
+const WordChoice = types.model("WordChoice", {
+  word: types.string,
+  isCorrect: types.boolean,
+  isMatched: types.optional(types.boolean, false),
+  matchedToId: types.maybeNull(types.string)
+})
 
 export const PictureToWordPracticeModel = types
   .model("PictureToWordPractice")
   .props({
     isActive: types.optional(types.boolean, false),
     assignedSets: types.array(types.reference(ObjectSetModel)),
-    currentObject: types.maybeNull(types.reference(ObjectModel)),
-    wordChoices: types.array(types.model({
-      word: types.string,
-      isCorrect: types.boolean
-    })),
+    currentObjects: types.array(types.reference(ObjectModel)),
+    wordChoices: types.array(WordChoice),
     correctAnswers: types.optional(types.number, 0),
     totalAttempts: types.optional(types.number, 0),
     settings: types.optional(types.model({
@@ -40,6 +47,8 @@ export const PictureToWordPracticeModel = types
     }
   }))
   .actions((self) => {
+    let disposer: (() => void) | undefined
+
     function setError(message: string | null) {
       self.error = message
     }
@@ -51,43 +60,80 @@ export const PictureToWordPracticeModel = types
         return false
       }
 
-      // Select object based on practice mode
-      let targetObject: Instance<typeof ObjectModel>
-      if (self.practiceMode === "sequential") {
-        // In sequential mode, try to pick the next unpracticed object
-        targetObject = objects.find(obj => !obj.metadata?.lastPracticed) || objects[0]
-      } else if (self.practiceMode === "adaptive") {
-        // In adaptive mode, prefer objects with lower success rates
-        targetObject = objects.reduce((lowest, current) => 
-          (current.metadata?.successRate || 0) < (lowest.metadata?.successRate || 0) ? current : lowest
-        )
-      } else {
-        // In random mode or fallback, select randomly
-        const targetIndex = Math.floor(Math.random() * objects.length)
-        targetObject = objects[targetIndex]
-      }
+      // Select 3 random objects for practice
+      const shuffledObjects = [...objects].sort(() => Math.random() - 0.5)
+      const selectedObjects = shuffledObjects.slice(0, 3)
+      
+      // Create word choices from selected objects
+      const choices = selectedObjects.map(obj => ({
+        word: obj.name,
+        isCorrect: true,
+        isMatched: false,
+        matchedToId: null
+      }))
 
-      self.currentObject = targetObject
+      // Shuffle the word choices
+      const shuffledChoices = [...choices].sort(() => Math.random() - 0.5)
 
-      // Generate word choices
-      const otherObjects = objects.filter(obj => obj !== targetObject)
-      const shuffledObjects = [...otherObjects].sort(() => Math.random() - 0.5)
-      const incorrectChoices = shuffledObjects.slice(0, self.settings.numberOfChoices - 1)
-
-      // Create and shuffle all choices
-      const choices = [
-        { word: targetObject.name, isCorrect: true },
-        ...incorrectChoices.map(obj => ({ word: obj.name, isCorrect: false }))
-      ].sort(() => Math.random() - 0.5)
-
-      self.wordChoices.replace(choices)
+      self.currentObjects.replace(selectedObjects)
+      self.wordChoices.replace(shuffledChoices)
       setError(null)
       return true
     }
 
+    const saveToStorage = async () => {
+      try {
+        const data = {
+          assignedSets: self.assignedSets.map(set => set.id),
+          settings: self.settings,
+          practiceMode: self.practiceMode
+        }
+        await storage.save(STORAGE_KEY, data)
+      } catch (error) {
+        console.error("Error saving practice data:", error)
+      }
+    }
+
+    const loadFromStorage = async () => {
+      try {
+        const data = await storage.load(STORAGE_KEY)
+        if (data) {
+          // Restore assigned sets
+          const assignedSetIds = data.assignedSets || []
+          const validSets = assignedSetIds.filter((id: string) => 
+            self.assignedSets.find(set => set.id === id)
+          )
+          self.assignedSets.replace(validSets)
+
+          // Restore settings
+          if (data.settings) {
+            Object.assign(self.settings, data.settings)
+          }
+
+          // Restore practice mode
+          if (data.practiceMode) {
+            self.practiceMode = data.practiceMode
+          }
+        }
+      } catch (error) {
+        console.error("Error loading practice data:", error)
+      }
+    }
+
     return {
+      afterCreate() {
+        loadFromStorage()
+      },
+
+      beforeDestroy() {
+        if (disposer) {
+          disposer()
+        }
+      },
+
       setAssignedSets(sets: Instance<typeof ObjectSetModel>[]) {
         self.assignedSets.replace(sets)
+        saveToStorage()
       },
 
       generateNewQuestion,
@@ -108,13 +154,15 @@ export const PictureToWordPracticeModel = types
         self.isActive = true
         self.correctAnswers = 0
         self.totalAttempts = 0
+        self.currentObjects.clear()
+        self.wordChoices.clear()
         setError(null)
         return generateNewQuestion()
       },
 
       endSession() {
         self.isActive = false
-        self.currentObject = null
+        self.currentObjects.clear()
         self.wordChoices.clear()
         setError(null)
       },
@@ -124,9 +172,19 @@ export const PictureToWordPracticeModel = types
         if (wasCorrect) {
           self.correctAnswers += 1
         }
-        if (self.currentObject) {
-          self.currentObject.updateMetadata(wasCorrect)
+      },
+
+      matchWord(wordId: string, objectId: string) {
+        const wordChoice = self.wordChoices.find(w => w.word === wordId)
+        const targetObject = self.currentObjects.find(obj => obj.id === objectId)
+        
+        if (wordChoice && targetObject) {
+          const isCorrect = targetObject.name === wordChoice.word
+          wordChoice.isMatched = true
+          wordChoice.matchedToId = objectId
+          return isCorrect
         }
+        return false
       },
 
       updateSettings(updates: Partial<{
@@ -135,10 +193,27 @@ export const PictureToWordPracticeModel = types
         announceCorrectness: boolean
       }>) {
         Object.assign(self.settings, updates)
+        saveToStorage()
       },
 
       setPracticeMode(mode: "sequential" | "random" | "adaptive") {
         self.practiceMode = mode
+        saveToStorage()
+      },
+
+      assignSet(set: Instance<typeof ObjectSetModel>) {
+        if (!self.assignedSets.includes(set)) {
+          self.assignedSets.push(set)
+          saveToStorage()
+        }
+      },
+
+      unassignSet(set: Instance<typeof ObjectSetModel>) {
+        const index = self.assignedSets.findIndex(s => s === set)
+        if (index !== -1) {
+          self.assignedSets.splice(index, 1)
+          saveToStorage()
+        }
       }
     }
   }) 

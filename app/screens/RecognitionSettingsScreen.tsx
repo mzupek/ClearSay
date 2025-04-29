@@ -1,29 +1,31 @@
 import React, { FC } from "react"
-import { ViewStyle, View, TextStyle, TouchableOpacity } from "react-native"
+import { ViewStyle, View, Switch, TextStyle, TouchableOpacity } from "react-native"
 import { Screen, Text, Button } from "app/components"
 import { colors, spacing } from "app/theme"
 import { useStores } from "app/models"
 import { observer } from "mobx-react-lite"
 import { useNavigation } from "@react-navigation/native"
 import { NativeStackNavigationProp } from "@react-navigation/native-stack"
-import { ObjectTabParamList } from "app/navigators/ObjectNavigator"
+import { AppStackParamList } from "app/navigators/AppNavigator"
 
-type NavigationProp = NativeStackNavigationProp<ObjectTabParamList>
+type NavigationProp = NativeStackNavigationProp<AppStackParamList>
 
-export const ObjectSettingsScreen: FC = observer(function ObjectSettingsScreen() {
+export const RecognitionSettingsScreen: FC = observer(function RecognitionSettingsScreen() {
   const { recognitionPractice: store } = useStores()
   const navigation = useNavigation<NavigationProp>()
+
+  const handleManageObjectSets = () => {
+    navigation.navigate("ManageObjectSets", { interactiveType: "Recognition" })
+  }
 
   return (
     <Screen
       preset="scroll"
       contentContainerStyle={$container}
-      safeAreaEdges={["top"]}
+      safeAreaEdges={["top", "bottom"]}
     >
-      <Text text="Practice Settings" preset="heading" style={$title} />
-      
       <View style={$section}>
-        <Text text="Object Sets" preset="subheading" style={$sectionTitle} />
+        <Text text="Object Sets" preset="heading" style={$sectionTitle} />
         <View style={$assignedSetsContainer}>
           {store.assignedSets.length === 0 ? (
             <Text 
@@ -39,7 +41,7 @@ export const ObjectSettingsScreen: FC = observer(function ObjectSettingsScreen()
                 </View>
                 <TouchableOpacity 
                   onPress={() => {
-                    store.setAssignedSets(store.assignedSets.filter(s => s.id !== set.id))
+                    store.setAssignedSets([])
                   }}
                   style={$unassignButton}
                 >
@@ -53,10 +55,28 @@ export const ObjectSettingsScreen: FC = observer(function ObjectSettingsScreen()
           text="Manage Object Sets"
           preset="default"
           style={$button}
-          onPress={() => navigation.navigate("ManageObjectSets", {
-            interactiveType: "Recognition"
-          })}
+          onPress={handleManageObjectSets}
         />
+      </View>
+
+      <View style={$section}>
+        <Text text="Practice Settings" preset="heading" style={$sectionTitle} />
+        
+        <View style={$settingRow}>
+          <Text text="Announce Choices" />
+          <Switch
+            value={store.settings.announceChoices}
+            onValueChange={(value) => store.updateSettings({ announceChoices: value })}
+          />
+        </View>
+
+        <View style={$settingRow}>
+          <Text text="Announce Correctness" />
+          <Switch
+            value={store.settings.announceCorrectness}
+            onValueChange={(value) => store.updateSettings({ announceCorrectness: value })}
+          />
+        </View>
       </View>
     </Screen>
   )
@@ -72,12 +92,17 @@ const $section: ViewStyle = {
   marginBottom: spacing.large,
 }
 
-const $title: TextStyle = {
-  marginBottom: spacing.large,
-}
-
 const $sectionTitle: TextStyle = {
   marginBottom: spacing.medium,
+}
+
+const $settingRow: ViewStyle = {
+  flexDirection: "row",
+  justifyContent: "space-between",
+  alignItems: "center",
+  paddingVertical: spacing.small,
+  borderBottomWidth: 1,
+  borderBottomColor: colors.palette.neutral300,
 }
 
 const $button: ViewStyle = {

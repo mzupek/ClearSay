@@ -1,4 +1,4 @@
-import React from "react"
+import React, { FC } from "react"
 import { TextStyle, View, ViewStyle, TouchableOpacity, Image, ImageStyle, ScrollView } from "react-native"
 import { Screen, Text, Button } from "app/components"
 import { colors, spacing } from "app/theme"
@@ -10,7 +10,7 @@ import { NativeStackNavigationProp } from "@react-navigation/native-stack"
 
 type NavigationProp = NativeStackNavigationProp<AppStackParamList>
 
-export const WelcomeScreen = observer(function WelcomeScreen() {
+export const WelcomeScreen: FC = observer(function WelcomeScreen() {
   const navigation = useNavigation<NavigationProp>()
   const store = useStores()
 
@@ -24,8 +24,15 @@ export const WelcomeScreen = observer(function WelcomeScreen() {
         bounces: true,
       }}
     >
-      <Text text="Welcome to ClearSay" preset="heading" style={$title} />
-      
+      <View style={$header}>
+        <Text text="Welcome to ClearSay" preset="heading" style={$title} />
+        <Text
+          text="Choose a practice mode to get started"
+          preset="subheading"
+          style={$subtitle}
+        />
+      </View>
+
       <View style={$mainContent}>
         <View style={$practiceSection}>
           <Text text="Practice Activities" preset="subheading" style={$sectionTitle} />
@@ -66,7 +73,7 @@ export const WelcomeScreen = observer(function WelcomeScreen() {
 
             <View style={$buttonGroup}>
               <TouchableOpacity
-                onPress={() => navigation.navigate("ObjectTabs", { screen: "PictureToWordPractice" })}
+                onPress={() => navigation.navigate("PictureToWordPractice")}
                 style={$buttonWrapper}
               >
                 <Image 
@@ -77,6 +84,23 @@ export const WelcomeScreen = observer(function WelcomeScreen() {
               </TouchableOpacity>
               <Text 
                 text="Picture to Word" 
+                style={$buttonText}
+              />
+            </View>
+
+            <View style={$buttonGroup}>
+              <TouchableOpacity
+                onPress={() => navigation.navigate("Recognition")}
+                style={$buttonWrapper}
+              >
+                <Image 
+                  source={require("../../assets/images/ImageRecognition.png")}
+                  style={$buttonImage}
+                  resizeMode="contain"
+                />
+              </TouchableOpacity>
+              <Text 
+                text="Name the Picture" 
                 style={$buttonText}
               />
             </View>
@@ -94,13 +118,15 @@ export const WelcomeScreen = observer(function WelcomeScreen() {
             </TouchableOpacity>
             <TouchableOpacity
               style={[$setCard, $manageSetCard]}
-              onPress={() => navigation.navigate("ManageObjectSets")}
+              onPress={() => navigation.navigate("ManageObjectSets", {})}
             >
               <Text text="Manage Sets" style={$newSetText} />
             </TouchableOpacity>
           </View>
         </View>
       </View>
+
+    
     </Screen>
   )
 })
@@ -108,13 +134,21 @@ export const WelcomeScreen = observer(function WelcomeScreen() {
 const $container: ViewStyle = {
   flex: 1,
   padding: spacing.large,
-  minHeight: "160%",
+  minHeight: "200%",
   flexGrow: 1,
 }
 
+const $header: ViewStyle = {
+  alignItems: "center",
+  marginBottom: spacing.huge,
+}
+
 const $title: TextStyle = {
-  marginBottom: spacing.extraLarge,
-  textAlign: "center",
+  marginBottom: spacing.small,
+}
+
+const $subtitle: TextStyle = {
+  color: colors.textDim,
 }
 
 const $mainContent: ViewStyle = {
@@ -137,10 +171,7 @@ const $sectionTitle: TextStyle = {
 }
 
 const $buttonContainer: ViewStyle = {
-  gap: spacing.extraLarge,
-  alignContent: "center",
-  justifyContent: "center",
-  alignItems: "center",
+  gap: spacing.medium,
 }
 
 const $buttonGroup: ViewStyle = {
@@ -170,13 +201,6 @@ const $buttonText: TextStyle = {
   marginTop: spacing.extraSmall,
 }
 
-const $setsContainer: ViewStyle = {
-  flexGrow: 0,
-  height: 140,
-  marginBottom: spacing.medium,
-  minHeight: 140,
-}
-
 const $objectSetButtons: ViewStyle = {
   flexDirection: "row",
   gap: spacing.medium,
@@ -199,15 +223,10 @@ const $newSetCard: ViewStyle = {
   alignItems: "center",
 }
 
-const $setName: TextStyle = {
-  fontSize: 18,
-  fontWeight: "bold",
-  marginBottom: spacing.tiny,
-}
-
-const $setCount: TextStyle = {
-  fontSize: 14,
-  color: colors.palette.neutral600,
+const $manageSetCard: ViewStyle = {
+  backgroundColor: colors.palette.neutral300,
+  justifyContent: "center",
+  alignItems: "center",
 }
 
 const $newSetText: TextStyle = {
@@ -216,8 +235,6 @@ const $newSetText: TextStyle = {
   textAlign: "center",
 }
 
-const $manageSetCard: ViewStyle = {
-  backgroundColor: colors.palette.neutral300,
-  justifyContent: "center",
-  alignItems: "center",
+const $button: ViewStyle = {
+  minHeight: 50,
 }
