@@ -7,7 +7,7 @@ import { observer } from "mobx-react-lite"
 import { useStores } from "app/models"
 import { WelcomeScreen } from "app/screens/WelcomeScreen"
 import { MainNavigator } from "./MainNavigator"
-import { ObjectNavigator } from "./ObjectNavigator"
+import { ObjectNavigator, ObjectTabParamList } from "./ObjectNavigator"
 import { ObjectSetScreen } from "app/screens/ObjectSetScreen"
 import { CreateObjectSetScreen } from "app/screens/CreateObjectSetScreen"
 import { ManageObjectSetsScreen } from "app/screens/ManageObjectSetsScreen"
@@ -17,7 +17,9 @@ import { useRef } from "react"
 export type AppStackParamList = {
   Welcome: undefined
   MainTabs: undefined
-  ObjectTabs: undefined
+  ObjectTabs: {
+    screen?: keyof ObjectTabParamList
+  }
   CreateObjectSet: undefined
   ManageObjectSets: undefined
 }

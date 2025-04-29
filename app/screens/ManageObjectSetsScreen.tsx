@@ -1,5 +1,5 @@
-import React, { FC } from "react"
-import { ViewStyle, View, TouchableOpacity, Image, ImageStyle, FlatList, TextStyle } from "react-native"
+import React, { FC, useState } from "react"
+import { ViewStyle, View, TouchableOpacity, Image, ImageStyle, FlatList, TextStyle, RefreshControl, Alert } from "react-native"
 import { Button, Screen, Text } from "../components"
 import { colors, spacing } from "../theme"
 import { useStores } from "app/models"
@@ -7,16 +7,121 @@ import { observer } from "mobx-react-lite"
 import { ObjectSet } from "app/models/ObjectSetModel"
 import { ObjectModel } from "app/models/ObjectModel"
 import { Instance } from "mobx-state-tree"
+import { useNavigation, useFocusEffect, useRoute } from "@react-navigation/native"
+import { NativeStackNavigationProp } from "@react-navigation/native-stack"
+import { ObjectTabParamList, InteractiveType } from "app/navigators/ObjectNavigator"
+
+type NavigationProp = NativeStackNavigationProp<ObjectTabParamList>
 
 export const ManageObjectSetsScreen: FC = observer(function ManageObjectSetsScreen() {
-  const { objectSets, objects } = useStores()
+  const store = useStores()
+  const navigation = useNavigation<NavigationProp>()
+  const route = useRoute()
+  const [refreshing, setRefreshing] = useState(false)
+  const [, forceUpdate] = useState({})
 
-  console.log("ManageObjectSetsScreen - objectSets:", objectSets.length)
-  console.log("ManageObjectSetsScreen - objects:", objects.length)
+  // Get the interactive type from route params
+  const interactiveType = (route.params as { interactiveType?: InteractiveType })?.interactiveType
+
+  // Function to get assigned sets based on interactive type
+  const getAssignedSets = () => {
+    switch (interactiveType) {
+      case "PictureToWord":
+        return store.pictureToWordPractice.assignedSets
+      // Add other interaction types here as they're implemented
+      default:
+        return []
+    }
+  }
+
+  // Function to assign sets based on interactive type
+  const assignSet = (set: ObjectSet) => {
+    switch (interactiveType) {
+      case "PictureToWord":
+        store.pictureToWordPractice.setAssignedSets([set])
+        break
+      // Add other interaction types here as they're implemented
+      default:
+        console.warn("No handler for interactive type:", interactiveType)
+        return
+    }
+
+    Alert.alert(
+      "Set Assigned",
+      `${set.name} has been assigned for ${interactiveType || "practice"}.`,
+      [{ text: "OK" }]
+    )
+  }
+
+  // Function to unassign sets based on interactive type
+  const unassignSet = (set: ObjectSet) => {
+    switch (interactiveType) {
+      case "PictureToWord":
+        store.pictureToWordPractice.setAssignedSets([])
+        break
+      // Add other interaction types here as they're implemented
+      default:
+        console.warn("No handler for interactive type:", interactiveType)
+        return
+    }
+
+    Alert.alert(
+      "Set Unassigned",
+      `${set.name} has been unassigned from ${interactiveType || "practice"}.`,
+      [{ text: "OK" }]
+    )
+  }
+
+  // Refresh data when screen comes into focus
+  useFocusEffect(
+    React.useCallback(() => {
+      const refreshData = async () => {
+        setRefreshing(true)
+        try {
+          // Force a re-render and refresh of the data
+          forceUpdate({})
+        } finally {
+          setRefreshing(false)
+        }
+      }
+      refreshData()
+    }, [])
+  )
+
+  const onRefresh = React.useCallback(async () => {
+    setRefreshing(true)
+    try {
+      // Force a re-render
+      forceUpdate({})
+    } finally {
+      setRefreshing(false)
+    }
+  }, [])
+
+  const handleCreateNewSet = () => {
+    navigation.navigate("CreateObjectSet", {})
+  }
+
+  const handleEditSet = (set: ObjectSet) => {
+    navigation.navigate("CreateObjectSet", { 
+      editMode: true,
+      setId: set.id,
+      setData: {
+        name: set.name,
+        description: set.description,
+        objects: Array.from(set.objects),
+        category: set.category,
+        practiceMode: set.practiceMode as "sequential" | "random" | "adaptive",
+        isActive: set.isActive
+      }
+    })
+  }
 
   const renderSetItem = ({ item: set }: { item: ObjectSet }) => {
     try {
       const setObjects = Array.from(set.objects || []).slice(0, 8)
+      const assignedSets = getAssignedSets()
+      const isAssigned = assignedSets.includes(set)
       
       return (
         <View style={$setCard}>
@@ -30,6 +135,12 @@ export const ManageObjectSetsScreen: FC = observer(function ManageObjectSetsScre
                 text={set.isDefault ? "Default Set" : "Custom Set"} 
                 style={[$setType, set.isDefault && $defaultSetType]} 
               />
+              {isAssigned && (
+                <Text 
+                  text="Assigned" 
+                  style={[$setType, $assignedType]} 
+                />
+              )}
             </View>
           </View>
 
@@ -43,7 +154,11 @@ export const ManageObjectSetsScreen: FC = observer(function ManageObjectSetsScre
               if (!object || !object.id) return null
               return (
                 <View key={object.id} style={$objectPreview}>
-                  <Image source={object.uri} style={$objectImage} resizeMode="contain" />
+                  <Image 
+                    source={object.isDefault ? object.uri : { uri: object.uri }}
+                    style={$objectImage} 
+                    resizeMode="contain"
+                  />
                   <Text text={object.name} style={$objectName} numberOfLines={1} />
                 </View>
               )
@@ -52,20 +167,34 @@ export const ManageObjectSetsScreen: FC = observer(function ManageObjectSetsScre
 
           <View style={$setActions}>
             <Button
-              text="Assign"
+              text={isAssigned ? "Unassign" : "Assign"}
               preset="default"
-              style={$actionButton}
+              style={[$actionButton, isAssigned && $unassignButton]}
+              onPress={() => {
+                if (isAssigned) {
+                  unassignSet(set)
+                } else {
+                  assignSet(set)
+                }
+              }}
             />
             <Button
               text="Edit"
               preset="default"
               style={$actionButton}
+              onPress={() => handleEditSet(set)}
             />
-            <Button
-              text="Practice"
-              preset="default"
-              style={$actionButton}
-            />
+            {interactiveType === "PictureToWord" && (
+              <Button
+                text="Practice"
+                preset="default"
+                style={$actionButton}
+                onPress={() => {
+                  assignSet(set)
+                  navigation.navigate("PictureToWordPractice")
+                }}
+              />
+            )}
           </View>
 
           {set.description && (
@@ -94,6 +223,7 @@ export const ManageObjectSetsScreen: FC = observer(function ManageObjectSetsScre
           text="Create New Set"
           preset="default"
           style={$createButton}
+          onPress={handleCreateNewSet}
         />
         <Button
           text="Import Set"
@@ -103,10 +233,17 @@ export const ManageObjectSetsScreen: FC = observer(function ManageObjectSetsScre
       </View>
 
       <FlatList
-        data={objectSets}
+        data={store.objectSets.slice()}
         renderItem={renderSetItem}
         keyExtractor={item => item.id}
         contentContainerStyle={$listContent}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={colors.text}
+          />
+        }
       />
     </Screen>
   )
@@ -232,4 +369,13 @@ const $createButton: ViewStyle = {
 const $importButton: ViewStyle = {
   flex: 1,
   marginLeft: spacing.small,
+}
+
+const $assignedType: TextStyle = {
+  backgroundColor: colors.palette.neutral200,
+  color: colors.palette.neutral600,
+}
+
+const $unassignButton: ViewStyle = {
+  backgroundColor: colors.palette.neutral300,
 } 

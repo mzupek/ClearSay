@@ -1,68 +1,71 @@
-import { createBottomTabNavigator } from "@react-navigation/bottom-tabs"
+import { createNativeStackNavigator } from "@react-navigation/native-stack"
 import { ObjectPracticeScreen } from "app/screens/ObjectPracticeScreen"
 import { ObjectProgressScreen } from "app/screens/ObjectProgressScreen"
 import { ObjectManagerScreen } from "app/screens/ObjectManagerScreen"
+import { CreateObjectSetScreen } from "app/screens/CreateObjectSetScreen"
+import { ManageObjectSetsScreen } from "app/screens/ManageObjectSetsScreen"
 import { colors } from "app/theme"
 import { Icon } from "app/components"
+import { ObjectModel, ObjectSetModel } from "app/models"
+import { Instance } from "mobx-state-tree"
+import { PictureToWordNavigator } from "./PictureToWordNavigator"
+
+export type InteractiveType = "PictureToWord" | "WordToPicture" | "Spelling" | "Pronunciation"
 
 export type ObjectTabParamList = {
   ObjectPractice: undefined
   ObjectProgress: undefined
   ObjectManager: undefined
+  PictureToWordPractice: undefined
+  CreateObjectSet: {
+    editMode?: boolean
+    setId?: string
+    setData?: {
+      name: string
+      description: string
+      objects: Instance<typeof ObjectModel>[]
+      category?: string
+      practiceMode?: "sequential" | "random" | "adaptive"
+      isActive?: boolean
+    }
+  }
+  ManageObjectSets: {
+    interactiveType?: InteractiveType
+  }
 }
 
-const Tab = createBottomTabNavigator<ObjectTabParamList>()
+const Stack = createNativeStackNavigator<ObjectTabParamList>()
 
-export function ObjectNavigator() {
+export const ObjectNavigator = () => {
   return (
-    <Tab.Navigator
-      screenOptions={{
-        headerShown: true,
-        headerStyle: {
-          backgroundColor: colors.background,
-        },
-        headerTintColor: colors.text,
-        tabBarStyle: {
-          backgroundColor: colors.background,
-        },
-        tabBarActiveTintColor: colors.tint,
-        tabBarInactiveTintColor: colors.text,
-      }}
-      initialRouteName="ObjectPractice"
-    >
-      <Tab.Screen 
-        name="ObjectPractice" 
-        component={ObjectPracticeScreen}
+    <Stack.Navigator>
+      <Stack.Screen name="ObjectManager" component={ObjectManagerScreen} />
+      <Stack.Screen name="ObjectPractice" component={ObjectPracticeScreen} />
+      <Stack.Screen 
+        name="PictureToWordPractice" 
+        component={PictureToWordNavigator}
         options={{
-          title: "Image Recognition",
-          tabBarLabel: 'Practice',
-          tabBarIcon: ({ color, size }) => (
-            <Icon icon="components" color={color} size={size} />
-          ),
+          headerShown: false
         }}
       />
-      <Tab.Screen 
-        name="ObjectProgress" 
-        component={ObjectProgressScreen}
+      <Stack.Screen 
+        name="CreateObjectSet" 
+        component={CreateObjectSetScreen}
         options={{
-          title: "Progress",
-          tabBarLabel: 'Progress',
-          tabBarIcon: ({ color, size }) => (
-            <Icon icon="view" color={color} size={size} />
-          ),
+          headerShown: true,
+          title: "Create Object Set",
+          headerBackTitle: "Back"
         }}
       />
-      <Tab.Screen 
-        name="ObjectManager" 
-        component={ObjectManagerScreen}
+      <Stack.Screen 
+        name="ManageObjectSets" 
+        component={ManageObjectSetsScreen}
         options={{
-          title: "Objects",
-          tabBarLabel: 'Objects',
-          tabBarIcon: ({ color, size }) => (
-            <Icon icon="settings" color={color} size={size} />
-          ),
+          headerShown: true,
+          title: "Manage Object Sets",
+          headerBackTitle: "Back"
         }}
       />
-    </Tab.Navigator>
+    </Stack.Navigator>
   )
 } 

@@ -20,10 +20,9 @@ import "./utils/gestureHandler"
 import { initI18n } from "./i18n"
 import "./utils/ignoreWarnings"
 import { useFonts } from "expo-font"
-import { useEffect } from "react"
+import { useEffect, useState } from "react"
 import { initialWindowMetrics, SafeAreaProvider } from "react-native-safe-area-context"
 import * as Linking from "expo-linking"
-import { useInitialRootStore } from "./models"
 import { AppNavigator, useNavigationPersistence } from "./navigators"
 import { ErrorBoundary } from "./screens/ErrorScreen/ErrorBoundary"
 import * as storage from "./utils/storage"
@@ -42,17 +41,25 @@ import { GestureHandlerRootView } from "react-native-gesture-handler"
 import { ViewStyle } from "react-native"
 import * as SplashScreen from "expo-splash-screen"
 import { RootStoreModel, RootStoreProvider } from "./models"
+import { setupRootStore } from "./models/helpers/setupRootStore"
 
 export const NAVIGATION_PERSISTENCE_KEY = "NAVIGATION_STATE"
 
-// Keep the splash screen visible while we fetch resources
-SplashScreen.preventAutoHideAsync()
-
+// Create the initial root store
 const rootStore = RootStoreModel.create({
   objects: [],
   objectSets: [],
   currentObjectSet: null,
-  currentObject: null
+  currentObject: null,
+  navigationRef: undefined,
+  currentUser: undefined,
+  practiceSession: {},
+  practiceStore: {},
+  settingsStore: {
+    selectedVoiceId: "",
+    selectedVoiceName: "",
+    availableVoices: []
+  }
 })
 
 // Web linking configuration
@@ -89,6 +96,8 @@ interface AppProps {
  * @returns {JSX.Element} The rendered `App` component.
  */
 export function App({ hideSplashScreen }: AppProps) {
+  const [rehydrated, setRehydrated] = useState(false)
+  
   const {
     initialNavigationState,
     onNavigationStateChange,
@@ -98,7 +107,11 @@ export function App({ hideSplashScreen }: AppProps) {
   useEffect(() => {
     async function prepare() {
       try {
-        // Remove loadObjects call since we haven't implemented it yet
+        // Initialize the root store with persistence
+        await setupRootStore(rootStore)
+        // Ensure default data exists after rehydration
+        rootStore.setupDefaultData()
+        setRehydrated(true)
       } catch (e) {
         console.warn(e)
       } finally {
@@ -115,7 +128,8 @@ export function App({ hideSplashScreen }: AppProps) {
     }
   }, [isNavigationStateRestored, hideSplashScreen])
 
-  if (!isNavigationStateRestored) return null
+  // Wait for rehydration to complete
+  if (!isNavigationStateRestored || !rehydrated) return null
 
   return (
     <GestureHandlerRootView style={$container}>

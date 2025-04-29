@@ -49,7 +49,7 @@ export const WelcomeScreen = observer(function WelcomeScreen() {
             
             <View style={$buttonGroup}>
               <TouchableOpacity
-                onPress={() => navigation.navigate("ObjectTabs")}
+                onPress={() => navigation.navigate("ObjectTabs", { screen: "ObjectPractice" })}
                 style={$buttonWrapper}
               >
                 <Image 
@@ -59,7 +59,24 @@ export const WelcomeScreen = observer(function WelcomeScreen() {
                 />
               </TouchableOpacity>
               <Text 
-                text="Recognition - Image" 
+                text="Image Recognition" 
+                style={$buttonText}
+              />
+            </View>
+
+            <View style={$buttonGroup}>
+              <TouchableOpacity
+                onPress={() => navigation.navigate("ObjectTabs", { screen: "PictureToWordPractice" })}
+                style={$buttonWrapper}
+              >
+                <Image 
+                  source={require("../../assets/images/ImageRecognition.png")}
+                  style={$buttonImage}
+                  resizeMode="contain"
+                />
+              </TouchableOpacity>
+              <Text 
+                text="Picture to Word" 
                 style={$buttonText}
               />
             </View>
@@ -91,7 +108,7 @@ export const WelcomeScreen = observer(function WelcomeScreen() {
 const $container: ViewStyle = {
   flex: 1,
   padding: spacing.large,
-  minHeight: "120%",
+  minHeight: "160%",
   flexGrow: 1,
 }
 

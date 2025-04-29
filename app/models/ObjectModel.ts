@@ -23,8 +23,21 @@ export const ObjectModel = types
       "synced"
     ),
     version: types.optional(types.number, 1),
-    isLocal: types.optional(types.boolean, false)
+    isLocal: types.optional(types.boolean, false),
+    metadata: types.optional(types.model({
+      attempts: types.optional(types.number, 0),
+      correctAttempts: types.optional(types.number, 0),
+      lastPracticed: types.maybe(types.Date),
+      successRate: types.optional(types.number, 0)
+    }), {})
   })
+  .views(self => ({
+    get successRate() {
+      return self.metadata.attempts > 0 
+        ? (self.metadata.correctAttempts / self.metadata.attempts) * 100 
+        : 0
+    }
+  }))
   .actions(self => ({
     markForSync() {
       self.syncStatus = "pending"
@@ -36,6 +49,15 @@ export const ObjectModel = types
     },
     markAsConflict() {
       self.syncStatus = "conflict"
+    },
+    updateMetadata(correct: boolean) {
+      self.metadata.attempts += 1
+      if (correct) {
+        self.metadata.correctAttempts += 1
+      }
+      self.metadata.lastPracticed = new Date()
+      self.metadata.successRate = self.successRate
+      self.lastModified = Date.now()
     }
   }))
 

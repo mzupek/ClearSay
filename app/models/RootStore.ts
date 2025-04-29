@@ -5,6 +5,7 @@ import { NavigationContainerRef } from "@react-navigation/native"
 import { defaultImages } from "./ObjectStore"
 import { PracticeStoreModel } from "./PracticeStore"
 import { SettingsStoreModel } from "./SettingsStore"
+import { PictureToWordPracticeModel } from "./PictureToWordPracticeModel"
 
 export const PracticeSessionModel = types
   .model("PracticeSessionModel", {
@@ -58,6 +59,9 @@ export const RootStoreModel = types
     currentUser: types.maybe(types.frozen()),
     practiceSession: types.optional(PracticeSessionModel, {}),
     practiceStore: types.optional(PracticeStoreModel, {}),
+    pictureToWordPractice: types.optional(PictureToWordPracticeModel, {
+      assignedSets: []
+    }),
     settingsStore: types.optional(SettingsStoreModel, {
       selectedVoiceId: "",
       selectedVoiceName: "",
@@ -80,33 +84,46 @@ export const RootStoreModel = types
       this.setupDefaultData()
     },
     setupDefaultData() {
-      // Add default objects first
-      const defaultObjectIds = defaultImages.objects.map((obj, index) => {
-        const newObject = this.addObject({
-          name: obj.name,
-          uri: obj.uri,
-          category: obj.category,
-          isDefault: true,
-          id: `default_${index + 1}` // Use the same IDs as defined in defaultImages
-        })
-        return newObject.id
-      })
-
-      // Create default set with object references
-      if (self.objectSets.length === 0) {
-        const defaultSet = this.addObjectSet({
-          name: "Default Objects",
-          description: "A collection of common objects for practice",
-          isDefault: true,
-          practiceMode: "sequential",
-          isActive: true,
-          objects: []
+      // Check if we already have default objects
+      const hasDefaultObjects = self.objects.some(obj => obj.isDefault)
+      
+      // Only add default objects if they don't exist
+      if (!hasDefaultObjects) {
+        // Add default objects first
+        const defaultObjectIds = defaultImages.objects.map((obj, index) => {
+          const existingObject = self.objects.find(o => o.id === `default_${index + 1}`)
+          if (!existingObject) {
+            const newObject = this.addObject({
+              name: obj.name,
+              uri: obj.uri,
+              category: obj.category,
+              isDefault: true,
+              id: `default_${index + 1}`
+            })
+            return newObject.id
+          }
+          return existingObject.id
         })
 
-        // Add objects to set after creation
-        defaultObjectIds.forEach(id => {
-          this.addObjectToSet(defaultSet.id, id)
-        })
+        // Check if default set exists
+        const hasDefaultSet = self.objectSets.some(set => set.isDefault)
+        
+        // Create default set if it doesn't exist
+        if (!hasDefaultSet) {
+          const defaultSet = this.addObjectSet({
+            name: "Default Objects",
+            description: "A collection of common objects for practice",
+            isDefault: true,
+            practiceMode: "sequential",
+            isActive: true,
+            objects: []
+          })
+
+          // Add objects to set after creation
+          defaultObjectIds.forEach(id => {
+            this.addObjectToSet(defaultSet.id, id)
+          })
+        }
       }
     },
     setCurrentObjectSet(objectSet: Instance<typeof ObjectSetModel> | null) {
