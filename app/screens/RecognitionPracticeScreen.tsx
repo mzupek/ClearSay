@@ -29,6 +29,31 @@ export const RecognitionPracticeScreen: FC = observer(function RecognitionPracti
     wasCorrectMatch: boolean
   }[]>([])
   const [incorrectPair, setIncorrectPair] = useState<{ wordId: string; imageId: string } | null>(null)
+  const [isTransitioning, setIsTransitioning] = useState(false)
+
+  // Debug logging for store state
+  useEffect(() => {
+    console.log("Store State:", {
+      isActive: store.isActive,
+      assignedSetsLength: store.assignedSets?.length,
+      currentObjectsLength: store.currentObjects?.length,
+      wordChoicesLength: store.wordChoices?.length,
+      reorderedObjectsLength: reorderedObjects.length,
+      reorderedWordsLength: reorderedWords.length,
+    })
+  }, [store.isActive, store.assignedSets, store.currentObjects, store.wordChoices, reorderedObjects, reorderedWords])
+
+  // Debug logging for instructions state
+  useEffect(() => {
+    console.log("Instructions State:", {
+      hasAssignedSets: Boolean(store.assignedSets?.length),
+      assignedSetsLength: store.assignedSets?.length,
+      isActive: store.isActive,
+      hasError: Boolean(store.error),
+      currentObjectsLength: store.currentObjects?.length,
+      wordChoicesLength: store.wordChoices?.length,
+    })
+  }, [store.assignedSets?.length, store.isActive, store.error, store.currentObjects?.length, store.wordChoices?.length])
 
   // Clear incorrect pair highlight after delay
   useEffect(() => {
@@ -40,103 +65,73 @@ export const RecognitionPracticeScreen: FC = observer(function RecognitionPracti
     }
   }, [incorrectPair])
 
-  const handleSelect = (id: string, type: "word" | "image") => {
-    if (type === "word" && !selectedImage) {
-      setSelectedWord(id)
-    } else if (type === "image" && !selectedWord) {
-      setSelectedImage(id)
-    }
+  // Reset matches and selections when objects or word choices change
+  useEffect(() => {
+    console.log("New Round Effect:", {
+      currentObjectsLength: store.currentObjects.length,
+      wordChoicesLength: store.wordChoices.length,
+      isTransitioning: store.isTransitioning
+    })
 
-    const wordId = type === "word" ? id : selectedWord
-    const imageId = type === "image" ? id : selectedImage
-
-    if (wordId && imageId) {
-      const isCorrect = store.tryMatch(wordId, imageId)
-      const newMatchIndex = matches.length
-
-      if (!isCorrect) {
-        // Show temporary red highlight for incorrect match
-        setIncorrectPair({ wordId, imageId })
-        setSelectedWord(null)
-        setSelectedImage(null)
-        return
-      }
-
-      // Configure animation
-      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut)
-
-      // Reorder the objects and words to match
-      const newObjects = [...reorderedObjects]
-      const newWords = [...reorderedWords]
-      
-      const objectIndex = newObjects.findIndex(obj => obj.id === imageId)
-      const wordIndex = newWords.findIndex(w => w.id === wordId)
-      
-      // Swap positions to align matched pairs
-      if (objectIndex !== newMatchIndex) {
-        [newObjects[objectIndex], newObjects[newMatchIndex]] = [newObjects[newMatchIndex], newObjects[objectIndex]]
-      }
-      if (wordIndex !== newMatchIndex) {
-        [newWords[wordIndex], newWords[newMatchIndex]] = [newWords[newMatchIndex], newWords[wordIndex]]
-      }
-
-      setReorderedObjects(newObjects)
-      setReorderedWords(newWords)
-      
-      const newMatch: MatchedPair = {
-        wordId,
-        imageId,
-        isCorrect: true,
-        rowIndex: newMatchIndex
-      }
-      
-      setMatches([...matches, newMatch])
+    // Clear matches and selections when transitioning or when objects/words change
+    if (store.isTransitioning || !store.currentObjects.length || !store.wordChoices.length) {
+      setMatches([])
       setSelectedWord(null)
       setSelectedImage(null)
+      setIncorrectPair(null)
+      setIsTransitioning(true)
+      
+      // Configure transition animation
+      LayoutAnimation.configureNext({
+        duration: 500,
+        create: {
+          type: LayoutAnimation.Types.easeInEaseOut,
+          property: LayoutAnimation.Properties.opacity,
+        },
+        update: {
+          type: LayoutAnimation.Types.easeInEaseOut,
+        },
+        delete: {
+          type: LayoutAnimation.Types.easeInEaseOut,
+          property: LayoutAnimation.Properties.opacity,
+        },
+      })
 
-      // If all items are matched, prepare for next round
-      if (matches.length + 1 === store.currentObjects.length) {
-        setTimeout(() => {
-          setMatches([])
-          store.generateNewRound()
-        }, 1000)
-      }
+      // Reset transition state after animation
+      setTimeout(() => {
+        setIsTransitioning(false)
+      }, 500)
+      return
     }
-  }
 
-  // Effect to handle new rounds
-  useEffect(() => {
-    if (!store.isTransitioning && store.currentObjects.length > 0 && store.wordChoices.length > 0) {
-      setMatches([])
-      setReorderedObjects([...store.currentObjects])
-      setReorderedWords(store.wordChoices.map(choice => ({
-        id: choice.id,
-        word: choice.word,
-        isMatched: false,
-        matchedToId: undefined,
-        wasCorrectMatch: false
-      })))
-    }
-  }, [store.isTransitioning, store.currentObjects.length, store.wordChoices.length])
+    // Initialize reordered arrays with current state
+    setReorderedObjects([...store.currentObjects])
+    setReorderedWords([...store.wordChoices])
+  }, [store.currentObjects.length, store.wordChoices.length, store.isTransitioning])
 
   // Effect to start session when screen becomes active
   useFocusEffect(
     React.useCallback(() => {
-      console.log("Debug - Screen focused, checking state:", {
+      console.log("Screen Focus Effect:", {
         assignedSetsLength: store.assignedSets?.length,
         isActive: store.isActive,
       })
       
       if (store.assignedSets?.length > 0 && !store.isActive) {
-        console.log("Debug - Starting session on focus")
+        console.log("Starting session on focus")
         store.startSession()
+      }
+
+      return () => {
+        // Clean up function
+        console.log("Screen losing focus")
       }
     }, [store])
   )
 
   // Effect to initialize first round
   useEffect(() => {
-    console.log("Debug - Store state:", {
+    console.log("Initialize Effect:", {
       assignedSetsLength: store.assignedSets?.length,
       hasAssignedSets: Boolean(store.assignedSets && store.assignedSets.length > 0),
       currentObjectsLength: store.currentObjects?.length,
@@ -144,21 +139,127 @@ export const RecognitionPracticeScreen: FC = observer(function RecognitionPracti
       error: store.error,
     })
 
-    const startPractice = () => {
-      console.log("Debug - Starting practice with assigned sets:", store.assignedSets?.length)
-      if (store.assignedSets.length > 0) {
-        console.log("Debug - Attempting to start session")
-        store.startSession()
-      }
+    // Only start practice if we have assigned sets and aren't already active
+    if (store.assignedSets?.length > 0 && !store.isActive) {
+      console.log("Starting practice with assigned sets:", store.assignedSets?.length)
+      store.startSession()
     }
-    
-    startPractice()
     
     return () => {
-      console.log("Debug - Cleaning up session")
-      store.endSession()
+      if (store.isActive) {
+        console.log("Cleaning up session")
+        store.endSession()
+      }
     }
-  }, [store.assignedSets.length])
+  }, [store.assignedSets?.length])
+
+  // Reorder objects and words when matches change
+  useEffect(() => {
+    if (!store.currentObjects.length || !store.wordChoices.length) return
+
+    // Create arrays for matched and unmatched items
+    const matchedPairs: { object: typeof store.currentObjects[0]; word: typeof store.wordChoices[0] }[] = []
+    const unmatchedObjects: typeof store.currentObjects[0][] = []
+    const unmatchedWords: typeof store.wordChoices[0][] = []
+
+    // Separate matched and unmatched items
+    store.currentObjects.forEach(obj => {
+      const wordChoice = store.wordChoices.find(w => w.matchedToId === obj.id)
+      if (wordChoice) {
+        matchedPairs.push({ object: obj, word: wordChoice })
+      } else {
+        unmatchedObjects.push(obj)
+      }
+    })
+
+    store.wordChoices.forEach(word => {
+      if (!word.matchedToId) {
+        unmatchedWords.push(word)
+      }
+    })
+
+    // Combine matched pairs first, then unmatched items
+    setReorderedObjects([
+      ...matchedPairs.map(p => p.object),
+      ...unmatchedObjects
+    ])
+    setReorderedWords([
+      ...matchedPairs.map(p => p.word),
+      ...unmatchedWords
+    ])
+  }, [store.currentObjects.length, store.wordChoices.length, matches.length])
+
+  // Handle match attempts
+  const handleSelect = (id: string, type: "word" | "image") => {
+    console.log("\n=== New Selection ===")
+    console.log("Selection:", { id, type })
+
+    // Check if this item is already matched
+    const isAlreadyMatched = matches.some(m => m.wordId === id || m.imageId === id)
+    console.log("Already matched?", isAlreadyMatched)
+    if (isAlreadyMatched) return
+
+    if (type === "word" && !selectedImage) {
+      console.log("Setting selected word:", id)
+      setSelectedWord(id)
+      setIncorrectPair(null)
+    } else if (type === "image" && !selectedWord) {
+      console.log("Setting selected image:", id)
+      setSelectedImage(id)
+      setIncorrectPair(null)
+    }
+
+    const wordId = type === "word" ? id : selectedWord
+    const imageId = type === "image" ? id : selectedImage
+
+    console.log("Attempting match with:", { wordId, imageId })
+
+    if (wordId && imageId) {
+      const isCorrect = store.tryMatch(wordId, imageId)
+      console.log("Match attempt result:", { wordId, imageId, isCorrect })
+
+      if (isCorrect) {
+        console.log("Correct match - updating UI")
+        const newMatchIndex = matches.length
+
+        // Configure animation
+        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut)
+
+        // Reorder the objects and words to match
+        const newObjects = [...reorderedObjects]
+        const newWords = [...reorderedWords]
+        
+        const objectIndex = newObjects.findIndex(obj => obj.id === imageId)
+        const wordIndex = newWords.findIndex(w => w.id === wordId)
+        
+        // Swap positions to align matched pairs
+        if (objectIndex !== newMatchIndex) {
+          [newObjects[objectIndex], newObjects[newMatchIndex]] = [newObjects[newMatchIndex], newObjects[objectIndex]]
+        }
+        if (wordIndex !== newMatchIndex) {
+          [newWords[wordIndex], newWords[newMatchIndex]] = [newWords[newMatchIndex], newWords[wordIndex]]
+        }
+
+        setReorderedObjects(newObjects)
+        setReorderedWords(newWords)
+        
+        setMatches([...matches, { wordId, imageId, isCorrect: true, rowIndex: newMatchIndex }])
+        setSelectedWord(null)
+        setSelectedImage(null)
+        setIncorrectPair(null)
+      } else {
+        console.log("Incorrect match - showing red highlight")
+        setIncorrectPair({ wordId, imageId })
+        setSelectedWord(null)
+        setSelectedImage(null)
+        
+        // Clear incorrect pair after a delay
+        setTimeout(() => {
+          setIncorrectPair(null)
+        }, 1000)
+      }
+    }
+  }
 
   const isMatched = (id: string) => {
     return matches.some(m => m.wordId === id || m.imageId === id)
@@ -178,101 +279,163 @@ export const RecognitionPracticeScreen: FC = observer(function RecognitionPracti
   }
 
   // Show instructions if no sets are assigned
-  if (!store.assignedSets || store.assignedSets.length === 0) {
-    console.log("Debug - Rendering no sets screen:", {
+  if (!store.assignedSets?.length) {
+    console.log("Rendering instructions screen - NO SETS:", {
       assignedSets: store.assignedSets,
-      length: store.assignedSets?.length,
+      assignedSetsLength: store.assignedSets?.length,
+      isActive: store.isActive
     })
     return (
       <Screen style={$container} contentContainerStyle={$centerContent}>
         <View style={$noSetsContainer}>
           <View style={$iconContainer}>
-            <Text text="📚" style={$emoji} />
+            <Text style={$emoji}>📚</Text>
           </View>
-          <Text 
-            text="No Object Sets Selected" 
-            preset="subheading" 
-            style={[$errorText, { marginBottom: spacing.medium }]} 
-          />
-          <Text 
-            text="To get started:" 
-            style={[$instructionText, { marginBottom: spacing.small }]} 
-          />
+          <Text style={[$errorText, { marginBottom: spacing.medium }]}>
+            No Object Sets Selected
+          </Text>
+          <Text style={[$instructionText, { marginBottom: spacing.small }]}>
+            To get started:
+          </Text>
           <View style={$instructionList}>
-            <Text text="1. Tap the Settings tab below" style={$instructionItem} />
-            <Text text="2. Select one or more object sets" style={$instructionItem} />
-            <Text text="3. Return here to practice" style={$instructionItem} />
+            <Text style={$instructionItem}>1. Tap the Settings tab below</Text>
+            <Text style={$instructionItem}>2. Select one or more object sets</Text>
+            <Text style={$instructionItem}>3. Return here to practice</Text>
           </View>
         </View>
       </Screen>
     )
   }
 
+  // Show error state
   if (store.error) {
+    console.log("Rendering error screen:", { error: store.error })
     return (
-      <Screen style={$container}>
-        <View style={$errorContainer}>
-          <View style={$iconContainer}>
-            <Text text="⚠️" style={$emoji} />
+      <Screen style={$container} preset="fixed" safeAreaEdges={["top"]}>
+        <View style={[$contentContainer, { justifyContent: "center" }]}>
+          <View style={$errorContainer}>
+            <View style={$iconContainer}>
+              <Text text="⚠️" style={$emoji} />
+            </View>
+            <Text text={store.error} preset="subheading" style={$errorText} />
+            <Text 
+              text="Please add more objects to your sets in Settings or select additional object sets" 
+              style={$errorSubtext} 
+            />
           </View>
-          <Text text={store.error} preset="subheading" style={$errorText} />
-          <Text 
-            text="Please add more objects to your sets in Settings or select additional object sets" 
-            style={$errorSubtext} 
-          />
         </View>
       </Screen>
     )
   }
+
+  // Show loading state
+  if (!store.currentObjects?.length || !store.wordChoices?.length) {
+    console.log("Rendering loading screen:", {
+      currentObjectsLength: store.currentObjects?.length,
+      wordChoicesLength: store.wordChoices?.length
+    })
+    return (
+      <Screen style={$container} preset="fixed" safeAreaEdges={["top"]}>
+        <View style={[$contentContainer, { justifyContent: "center" }]}>
+          <View style={$noSetsContainer}>
+            <View style={$iconContainer}>
+              <Text text="⌛" style={$emoji} />
+            </View>
+            <Text 
+              text="Loading practice items..." 
+              preset="subheading" 
+              style={[$errorText, { marginBottom: spacing.medium }]} 
+            />
+          </View>
+        </View>
+      </Screen>
+    )
+  }
+
+  // If we have no reordered objects/words yet but have current objects, initialize them
+  if ((!reorderedObjects?.length || !reorderedWords?.length) && store.currentObjects?.length > 0 && store.wordChoices?.length > 0) {
+    console.log("Initializing reordered arrays")
+    setReorderedObjects([...store.currentObjects])
+    setReorderedWords(store.wordChoices.map(choice => ({
+      id: choice.id,
+      word: choice.word,
+      isMatched: false,
+      matchedToId: undefined,
+      wasCorrectMatch: false
+    })))
+  }
+
+  console.log("Rendering main content:", {
+    reorderedObjectsLength: reorderedObjects.length,
+    reorderedWordsLength: reorderedWords.length,
+    matchesLength: matches.length,
+    currentObjects: store.currentObjects.length,
+    wordChoices: store.wordChoices.length,
+    assignedSets: store.assignedSets.length,
+    isActive: store.isActive
+  })
 
   return (
     <Screen style={$container} preset="scroll">
       <View style={$contentContainer}>
         <View style={$scoreContainer}>
-          <Text text={`Score: ${store.correctAnswers}/${store.totalAttempts}`} style={$scoreText} />
+          <Text 
+            text={`Session ${store.totalSessions} • Round ${store.currentRound + 1} • Score: ${store.correctAnswers}/${store.totalAttempts} (${store.accuracy}%)`} 
+            style={$scoreText} 
+          />
         </View>
 
-        <View style={$instructions}>
-          <Text text="Tap any word or picture to start matching" style={$instructionText} />
-          {selectedWord && (
+        {isTransitioning && (
+          <View style={$transitionOverlay}>
+            <View style={$transitionContent}>
+              <Text text="Great job!" style={$transitionText} />
+              <Text text="Next round starting..." style={$transitionSubtext} />
+            </View>
+          </View>
+        )}
+
+        {selectedWord || selectedImage ? (
+          <View style={$instructions}>
             <Text 
-              text="Now tap the matching picture" 
+              text={selectedWord ? "Now tap the matching picture" : "Now tap the matching word"}
               style={[$instructionText, { color: colors.palette.neutral600 }]} 
             />
-          )}
-          {selectedImage && (
-            <Text 
-              text="Now tap the matching word" 
-              style={[$instructionText, { color: colors.palette.neutral600 }]} 
-            />
-          )}
-        </View>
+          </View>
+        ) : null}
 
         <View style={$mainContent}>
           {/* Left column - Images */}
           <View style={$column}>
             {reorderedObjects.map((object, index) => {
+              console.log("Rendering image:", { objectId: object.id, index })
               const match = matches.find(m => m.imageId === object.id)
               const isIncorrect = incorrectPair?.imageId === object.id
               return (
-                <View key={object.id} style={[$row, match?.isCorrect && $correctRow]}>
-                  <Pressable
+                <Pressable
+                  key={object.id}
+                  style={[
+                    $cardWrapper,
+                    match?.isCorrect && $correctRow
+                  ]}
+                  disabled={match?.isCorrect}
+                  onPress={() => handleSelect(object.id, "image")}
+                >
+                  <View
                     style={[
                       $imageContainer,
                       selectedImage === object.id && $selected,
                       match?.isCorrect && $correctMatch,
-                      isIncorrect && $incorrectMatch
+                      // Only show incorrect if this is the last attempted incorrect pair
+                      incorrectPair && incorrectPair.imageId === object.id && !match?.isCorrect && $incorrectMatch
                     ]}
-                    disabled={match?.isCorrect}
-                    onPress={() => handleSelect(object.id, "image")}
                   >
                     <Image
                       source={object.isDefault ? object.uri : { uri: object.uri }}
                       style={$imageStyle}
                       resizeMode="contain"
                     />
-                  </Pressable>
-                </View>
+                  </View>
+                </Pressable>
               )
             })}
           </View>
@@ -280,23 +443,31 @@ export const RecognitionPracticeScreen: FC = observer(function RecognitionPracti
           {/* Right column - Words */}
           <View style={$column}>
             {reorderedWords.map((choice, index) => {
+              console.log("Rendering word:", { wordId: choice.id, word: choice.word, index })
               const match = matches.find(m => m.wordId === choice.id)
               const isIncorrect = incorrectPair?.wordId === choice.id
               return (
-                <View key={choice.id} style={[$row, match?.isCorrect && $correctRow]}>
-                  <Pressable
+                <Pressable
+                  key={choice.id}
+                  style={[
+                    $cardWrapper,
+                    match?.isCorrect && $correctRow
+                  ]}
+                  disabled={match?.isCorrect}
+                  onPress={() => handleSelect(choice.id, "word")}
+                >
+                  <View
                     style={[
                       $wordContainer,
                       selectedWord === choice.id && $selected,
                       match?.isCorrect && $correctMatch,
-                      isIncorrect && $incorrectMatch
+                      // Only show incorrect if this is the last attempted incorrect pair
+                      incorrectPair && incorrectPair.wordId === choice.id && !match?.isCorrect && $incorrectMatch
                     ]}
-                    disabled={match?.isCorrect}
-                    onPress={() => handleSelect(choice.id, "word")}
                   >
                     <Text text={choice.word} style={$wordText} />
-                  </Pressable>
-                </View>
+                  </View>
+                </Pressable>
               )
             })}
           </View>
@@ -308,99 +479,112 @@ export const RecognitionPracticeScreen: FC = observer(function RecognitionPracti
 
 const $container: ViewStyle = {
   flex: 1,
+  padding: spacing.medium,
   backgroundColor: colors.background,
+}
+
+const $centerContent: ViewStyle = {
+  flex: 1,
+  justifyContent: "center",
 }
 
 const $contentContainer: ViewStyle = {
   flex: 1,
   padding: spacing.medium,
+  alignItems: "center",
+  justifyContent: "center",
+  width: "100%",
+  backgroundColor: colors.background,
+  zIndex: 2,
 }
 
 const $scoreContainer: ViewStyle = {
   alignItems: "center",
-  marginVertical: spacing.medium,
-}
-
-const $scoreText: TextStyle = {
-  fontSize: 24,
-  fontWeight: "600",
-  color: colors.text,
+  marginVertical: spacing.small,
+  width: "90%",
+  maxWidth: 600,
+  padding: spacing.small,
+  backgroundColor: colors.palette.neutral100,
+  borderRadius: spacing.medium,
+  borderWidth: 1,
+  borderColor: colors.palette.neutral300,
 }
 
 const $instructions: ViewStyle = {
   alignItems: "center",
-  marginBottom: spacing.large,
+  marginBottom: spacing.small,
   padding: spacing.medium,
   backgroundColor: colors.palette.neutral100,
   borderRadius: spacing.medium,
+  width: "90%",
+  maxWidth: 600,
+  borderWidth: 1,
+  borderColor: colors.palette.neutral300,
 }
 
 const $instructionText: TextStyle = {
   fontSize: 16,
-  fontWeight: "500",
+  color: colors.textDim,
   textAlign: "center",
-  marginBottom: spacing.tiny,
 }
 
 const $mainContent: ViewStyle = {
-  flex: 1,
   flexDirection: "row",
-  gap: spacing.extraLarge,
+  justifyContent: "center",
+  alignItems: "flex-start",
+  width: "100%",
+  gap: spacing.medium,
+  paddingHorizontal: spacing.medium,
+  flex: 1,
+  maxWidth: 800,
 }
 
 const $column: ViewStyle = {
-  flex: 1,
-  justifyContent: "flex-start",
   alignItems: "center",
-  gap: spacing.medium,
+  justifyContent: "flex-start",
+  width: "48%",
+  gap: spacing.small,
 }
 
-const $row: ViewStyle = {
+const $cardWrapper: ViewStyle = {
   width: "100%",
+  aspectRatio: 1,
   padding: spacing.tiny,
   borderRadius: spacing.medium,
+  minHeight: 120,
+  maxHeight: 200,
 }
 
-const $correctRow: ViewStyle = {
-  backgroundColor: colors.palette.success100,
-}
-
-const $incorrectRow: ViewStyle = {
-  backgroundColor: colors.palette.angry100,
+const $cardBase: ViewStyle = {
+  width: "100%",
+  height: "100%",
+  borderRadius: spacing.medium,
+  padding: spacing.medium,
+  justifyContent: "center",
+  alignItems: "center",
+  borderWidth: 1,
+  borderColor: colors.palette.neutral300,
+  shadowColor: colors.palette.neutral800,
+  shadowOffset: { width: 0, height: 2 },
+  shadowOpacity: 0.1,
+  shadowRadius: 3,
+  elevation: 3,
 }
 
 const $imageContainer: ViewStyle = {
-  width: "100%",
-  aspectRatio: 1,
+  ...$cardBase,
   backgroundColor: colors.palette.neutral200,
-  borderRadius: spacing.medium,
-  padding: spacing.small,
-  justifyContent: "center",
-  alignItems: "center",
-  borderWidth: 2,
-  borderColor: "transparent",
-}
-
-const $imageStyle: ImageStyle = {
-  width: "100%",
-  height: "100%",
 }
 
 const $wordContainer: ViewStyle = {
-  width: "100%",
-  aspectRatio: 1,
+  ...$cardBase,
   backgroundColor: colors.palette.neutral100,
-  borderRadius: spacing.medium,
-  padding: spacing.medium,
-  alignItems: "center",
-  justifyContent: "center",
-  shadowColor: colors.palette.neutral800,
-  shadowOffset: { width: 0, height: 2 },
-  shadowOpacity: 0.25,
-  shadowRadius: 3.84,
-  elevation: 5,
-  borderWidth: 2,
-  borderColor: "transparent",
+}
+
+const $imageStyle: ImageStyle = {
+  width: "80%",
+  height: "80%",
+  resizeMode: "contain",
 }
 
 const $wordText: TextStyle = {
@@ -425,6 +609,11 @@ const $incorrectMatch: ViewStyle = {
   backgroundColor: colors.palette.angry100,
 }
 
+const $correctRow: ViewStyle = {
+  backgroundColor: colors.palette.success100,
+  borderRadius: spacing.medium,
+}
+
 const $noSetsContainer: ViewStyle = {
   flex: 1,
   justifyContent: "center",
@@ -437,10 +626,6 @@ const $noSetsContainer: ViewStyle = {
 
 const $iconContainer: ViewStyle = {
   marginBottom: spacing.medium,
-}
-
-const $emoji: TextStyle = {
-  fontSize: 48,
 }
 
 const $instructionList: ViewStyle = {
@@ -461,11 +646,14 @@ const $errorContainer: ViewStyle = {
   justifyContent: "center",
   alignItems: "center",
   padding: spacing.large,
+  width: "90%",
+  maxWidth: 600,
 }
 
 const $errorText: TextStyle = {
   textAlign: "center",
   marginBottom: spacing.small,
+  color: colors.error,
 }
 
 const $errorSubtext: TextStyle = {
@@ -473,7 +661,54 @@ const $errorSubtext: TextStyle = {
   color: colors.textDim,
 }
 
-const $centerContent: ViewStyle = {
-  flex: 1,
-  justifyContent: "center",
+const $scoreText: TextStyle = {
+  fontSize: 16,
+  fontWeight: "600",
+  color: colors.text,
+  textAlign: "center",
+}
+
+const $emoji: TextStyle = {
+  fontSize: 48,
+}
+
+const $transitionOverlay: ViewStyle = {
+  position: 'absolute',
+  top: 0,
+  left: 0,
+  right: 0,
+  bottom: 0,
+  backgroundColor: colors.background,
+  justifyContent: 'center',
+  alignItems: 'center',
+  zIndex: 1000,
+}
+
+const $transitionContent: ViewStyle = {
+  alignItems: 'center',
+  padding: spacing.large,
+  backgroundColor: colors.palette.neutral100,
+  borderRadius: spacing.medium,
+  borderWidth: 1,
+  borderColor: colors.palette.neutral300,
+}
+
+const $transitionText: TextStyle = {
+  fontSize: 24,
+  fontWeight: 'bold',
+  color: colors.text,
+  marginBottom: spacing.small,
+}
+
+const $transitionSubtext: TextStyle = {
+  fontSize: 16,
+  color: colors.textDim,
+}
+
+const $testText: TextStyle = {
+  color: 'blue',
+  fontSize: 24,
+  fontWeight: 'bold',
+  textAlign: 'center',
+  marginBottom: spacing.medium,
 } 

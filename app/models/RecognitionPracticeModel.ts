@@ -32,6 +32,7 @@ export const RecognitionPracticeModel = types
     allTimeCorrectAnswers: types.optional(types.number, 0),
     allTimeAttempts: types.optional(types.number, 0),
     totalSessions: types.optional(types.number, 0),
+    currentRound: types.optional(types.number, 0),
     sessionHistory: types.optional(types.array(SessionRecord), []),
     settings: types.optional(types.model({
       numberOfItems: types.optional(types.number, 3),
@@ -112,39 +113,44 @@ export const RecognitionPracticeModel = types
     }
 
     function generateNewRound() {
-      if (self.isTransitioning) return false
+      console.log("=== Starting New Round ===")
+      console.log("Current State:", {
+        session: self.totalSessions,
+        round: self.currentRound,
+        score: `${self.correctAnswers}/${self.totalAttempts}`,
+        accuracy: self.accuracy,
+      })
 
-      if (self.availableObjectPool.length < 3) {
-        const allObjects = self.availableObjects
-        if (allObjects.length === 0) {
-          return false
-        }
-        self.availableObjectPool.replace([...allObjects].sort(() => Math.random() - 0.5))
+      // Shuffle the object pool more thoroughly
+      const shuffledPool = [...self.availableObjectPool]
+      for (let i = shuffledPool.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1))
+        ;[shuffledPool[i], shuffledPool[j]] = [shuffledPool[j], shuffledPool[i]]
       }
 
-      const selectedObjects = self.availableObjectPool.slice(0, 3)
-      
-      self.availableObjectPool.replace([
-        ...self.availableObjectPool.slice(3),
-        ...selectedObjects
-      ])
+      // Select objects for this round
+      self.currentObjects.clear()
+      self.currentObjects.replace(shuffledPool.slice(0, 3))
+      console.log("Selected Objects:", self.currentObjects.map(obj => ({ id: obj.id, name: obj.name })))
+
+      // Shuffle word choices independently
+      const shuffledWords = [...self.currentObjects]
+      for (let i = shuffledWords.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1))
+        ;[shuffledWords[i], shuffledWords[j]] = [shuffledWords[j], shuffledWords[i]]
+      }
 
       self.wordChoices.clear()
-      self.currentObjects.clear()
-
-      self.currentObjects.replace(selectedObjects)
-
-      const choices = selectedObjects.map(obj => ({
+      self.wordChoices.replace(shuffledWords.map((obj) => ({
         id: obj.id,
         word: obj.name,
         isMatched: false,
         matchedToId: undefined,
-        wasCorrectMatch: false
-      })).sort(() => Math.random() - 0.5)
+        wasCorrectMatch: false,
+      })))
 
-      self.wordChoices.replace(choices)
-      setError(null)
-      return true
+      console.log("Shuffled Word Choices:", self.wordChoices.map(w => ({ id: w.id, word: w.word })))
+      console.log("=== Round Setup Complete ===\n")
     }
 
     return {
@@ -153,69 +159,87 @@ export const RecognitionPracticeModel = types
       },
 
       generateNewRound() {
-        if (self.isTransitioning) return false
+        console.log("=== Starting New Round ===")
+        console.log("Current State:", {
+          session: self.totalSessions,
+          round: self.currentRound,
+          score: `${self.correctAnswers}/${self.totalAttempts}`,
+          accuracy: self.accuracy,
+        })
 
-        if (self.availableObjectPool.length < 3) {
-          const allObjects = self.availableObjects
-          if (allObjects.length === 0) {
-            return false
-          }
-          self.availableObjectPool.replace([...allObjects].sort(() => Math.random() - 0.5))
+        // Shuffle the object pool more thoroughly
+        const shuffledPool = [...self.availableObjectPool]
+        for (let i = shuffledPool.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1))
+          ;[shuffledPool[i], shuffledPool[j]] = [shuffledPool[j], shuffledPool[i]]
         }
 
-        const selectedObjects = self.availableObjectPool.slice(0, 3)
-        
-        self.availableObjectPool.replace([
-          ...self.availableObjectPool.slice(3),
-          ...selectedObjects
-        ])
+        // Select objects for this round
+        self.currentObjects.clear()
+        self.currentObjects.replace(shuffledPool.slice(0, 3))
+        console.log("Selected Objects:", self.currentObjects.map(obj => ({ id: obj.id, name: obj.name })))
+
+        // Shuffle word choices independently
+        const shuffledWords = [...self.currentObjects]
+        for (let i = shuffledWords.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1))
+          ;[shuffledWords[i], shuffledWords[j]] = [shuffledWords[j], shuffledWords[i]]
+        }
 
         self.wordChoices.clear()
-        self.currentObjects.clear()
-
-        self.currentObjects.replace(selectedObjects)
-
-        const choices = selectedObjects.map(obj => ({
+        self.wordChoices.replace(shuffledWords.map((obj) => ({
           id: obj.id,
           word: obj.name,
           isMatched: false,
           matchedToId: undefined,
-          wasCorrectMatch: false
-        })).sort(() => Math.random() - 0.5)
+          wasCorrectMatch: false,
+        })))
 
-        self.wordChoices.replace(choices)
-        setError(null)
-        return true
+        console.log("Shuffled Word Choices:", self.wordChoices.map(w => ({ id: w.id, word: w.word })))
+        console.log("=== Round Setup Complete ===\n")
       },
 
       skipCurrentRound() {
         if (!self.isTransitioning) {
-          this.startTransition()
-          transitionTimer = setTimeout(() => {
-            this.completeTransition()
-          }, 500) // Faster transition for skips
+          this.startNewRound()
         }
       },
 
       startSession() {
+        console.log("Starting session with sets:", self.assignedSets.length)
         if (self.assignedSets.length === 0) {
           setError("No object sets assigned for practice")
           return false
         }
         
         const objects = self.availableObjects
-        if (objects.length === 0) {
+        console.log("Available objects:", objects.length)
+        if (objects.length < 3) {
           setError("Not enough objects available for practice")
           return false
         }
 
+        // Clear any existing state
+        self.currentObjects.clear()
+        self.wordChoices.clear()
+        self.availableObjectPool.clear()
+
+        // Initialize with fresh state
         self.availableObjectPool.replace([...objects].sort(() => Math.random() - 0.5))
         self.isActive = true
         self.correctAnswers = 0
         self.totalAttempts = 0
         self.totalSessions += 1
+        self.isTransitioning = false
         setError(null)
-        return this.generateNewRound()
+
+        // Generate first round immediately
+        const success = this.generateNewRound()
+        console.log("First round generated:", success, {
+          currentObjects: self.currentObjects.length,
+          wordChoices: self.wordChoices.length
+        })
+        return success
       },
 
       endSession() {
@@ -242,45 +266,69 @@ export const RecognitionPracticeModel = types
         setError(null)
       },
 
-      startTransition() {
-        if (self.isTransitioning) return
-        self.isTransitioning = true
+      startNewRound() {
+        self.currentRound += 1
+        this.startTransition()
+        // Increase transition duration for smoother effect
+        setTimeout(() => {
+          this.completeTransition()
+        }, 1000)
       },
 
-      completeTransition() {
-        const success = this.generateNewRound()
-        if (success) {
-          self.isTransitioning = false
-        } else {
-          this.endSession()
+      startTransition() {
+        if (!self.isTransitioning) {
+          self.isTransitioning = true
         }
       },
 
+      completeTransition() {
+        this.generateNewRound()
+        self.isTransitioning = false
+      },
+
       tryMatch(wordId: string, objectId: string) {
+        console.log("\n=== Attempting Match ===")
+        console.log("Current state:", {
+          session: self.totalSessions,
+          round: self.currentRound,
+          score: `${self.correctAnswers}/${self.totalAttempts}`,
+          accuracy: self.accuracy,
+        })
+
         const wordChoice = self.wordChoices.find(w => w.id === wordId)
+        console.log("Found wordChoice:", { wordChoice })
         if (!wordChoice || wordChoice.isMatched) return false
 
         self.totalAttempts += 1
-        const isCorrect = wordChoice.id === objectId
+        const matchingObject = self.currentObjects.find(obj => obj.id === objectId)
+        console.log("Found matchingObject:", { object: matchingObject })
+        const isCorrect = matchingObject && wordChoice.word === matchingObject.name
+
+        console.log("Match result:", { wordId, objectId, isCorrect })
 
         if (isCorrect) {
           wordChoice.isMatched = true
           wordChoice.matchedToId = objectId
           wordChoice.wasCorrectMatch = true
           self.correctAnswers += 1
+          console.log("Updated score:", {
+            accuracy: self.accuracy,
+            correct: self.correctAnswers,
+            total: self.totalAttempts
+          })
 
           const object = self.currentObjects.find(obj => obj.id === objectId)
           if (object) {
             object.updateMetadata(true)
           }
 
-          const allMatchesComplete = self.wordChoices.every(w => w.isMatched)
-
-          if (allMatchesComplete && !self.isTransitioning) {
-            this.startTransition()
-            transitionTimer = setTimeout(() => {
-              this.completeTransition()
-            }, 1000)
+          const allMatched = self.wordChoices.every((w) => w.isMatched)
+          console.log("All matches complete?", allMatched)
+          if (allMatched) {
+            // Add a small delay before starting transition to show success
+            setTimeout(() => {
+              this.startNewRound()
+            }, 500)
           }
         }
 

@@ -53,6 +53,8 @@ const AppStack = observer(function AppStack() {
     <Stack.Navigator
       screenOptions={{
         headerShown: false,
+        animation: 'slide_from_right',
+        gestureEnabled: true,
         contentStyle: { backgroundColor: colors.background }
       }}
       initialRouteName="Welcome"

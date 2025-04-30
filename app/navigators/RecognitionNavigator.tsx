@@ -44,6 +44,8 @@ export function RecognitionNavigator() {
             tintColor={colors.text}
           />
         ),
+        animation: 'slide_from_right',
+        animationDuration: 200,
       }}
     >
       <Tab.Screen 

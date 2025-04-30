@@ -55,10 +55,39 @@ const rootStore = RootStoreModel.create({
   currentUser: undefined,
   practiceSession: {},
   practiceStore: {},
+  pictureToWordPractice: {
+    assignedSets: [],
+    isActive: false,
+    error: null,
+    wordChoices: [],
+    correctAnswers: 0,
+    totalAttempts: 0,
+    settings: {
+      numberOfChoices: 3,
+      announceChoices: true,
+      announceCorrectness: true
+    },
+    practiceMode: "random"
+  },
   settingsStore: {
     selectedVoiceId: "",
     selectedVoiceName: "",
     availableVoices: []
+  },
+  recognitionPractice: {
+    assignedSets: [],
+    isActive: false,
+    error: null,
+    wordChoices: [],
+    correctAnswers: 0,
+    totalAttempts: 0,
+    currentRound: 0,
+    settings: {
+      numberOfItems: 3,
+      announceChoices: true,
+      announceCorrectness: true
+    },
+    practiceMode: "random"
   }
 })
 
